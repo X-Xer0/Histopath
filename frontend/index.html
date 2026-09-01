@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HistologyAI - Automated Biopsy Slide Tumor Segmentation & Grading</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="logo-icon">🔬</div>
+                <div>
+                    <h1>HistologyAI</h1>
+                    <p class="subtitle">Automated Tumor Segmentation & Severity Grading System</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-pulse">● System Ready</span>
+                <span class="badge badge-tech">Sevalla Cloud Native</span>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Column: Upload & Canvas Viewer -->
+            <section class="card viewer-card">
+                <div class="card-header">
+                    <h2>Biopsy Tissue Slide Viewer</h2>
+                    <div class="slider-control" id="sliderGroup" style="display: none;">
+                        <label for="opacitySlider">Mask Opacity: <span id="opacityVal">60%</span></label>
+                        <input type="range" id="opacitySlider" min="0" max="100" value="60">
+                    </div>
+                </div>
+
+                <!-- Dropzone -->
+                <div class="dropzone" id="dropzone">
+                    <div class="dropzone-content">
+                        <div class="upload-icon">📁</div>
+                        <h3>Drag & Drop Microscopic H&E Slide</h3>
+                        <p>Supports PNG, JPG, JPEG, TIFF (Max 20MB)</p>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Select Slide Image</button>
+                    </div>
+                </div>
+
+                <!-- Canvas Viewer Container -->
+                <div class="canvas-wrapper" id="canvasWrapper" style="display: none;">
+                    <div class="canvas-container">
+                        <canvas id="slideCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="action-bar" id="actionBar" style="display: none;">
+                    <button class="btn btn-secondary" id="resetBtn">Reset Slide</button>
+                    <button class="btn btn-accent" id="analyzeBtn">⚡ Run Tumor Segmentation</button>
+                </div>
+            </section>
+
+            <!-- Right Column: Results Dashboard -->
+            <section class="card results-card">
+                <div class="card-header">
+                    <h2>Quantitative Diagnostics Dashboard</h2>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyResults">
+                    <div class="empty-icon">📊</div>
+                    <p>Upload a tissue slide and click <b>Run Tumor Segmentation</b> to view tumor metrics, severity grade, and download pathology reports.</p>
+                </div>
+
+                <!-- Loading State -->
+                <div class="loading-state" id="loadingSpinner" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Running Macenko Stain Normalization & Deep U-Net Segmentation...</p>
+                </div>
+
+                <!-- Diagnostic Results (Hidden initially) -->
+                <div class="results-content" id="resultsContent" style="display: none;">
+                    <!-- Severity Grade Badge -->
+                    <div class="grade-banner" id="gradeBanner">
+                        <div class="grade-badge" id="gradeBadge">Grade II</div>
+                        <div class="grade-text">
+                            <h3 id="gradeTitle">Moderately Differentiated</h3>
+                            <p id="riskTitle">Moderate Risk</p>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Grid -->
+                    <div class="metrics-grid">
+                        <div class="metric-box">
+                            <span class="metric-label">Tumor Burden Ratio</span>
+                            <span class="metric-value highlight" id="metricBurden">0.00 %</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Tumor Surface Area</span>
+                            <span class="metric-value" id="metricTumorArea">0.00 mm²</span>
+                            <span class="metric-sub" id="metricTumorUm">0 μm²</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Total Tissue Field Area</span>
+                            <span class="metric-value" id="metricTotalArea">0.00 mm²</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Spatial Scale</span>
+                            <span class="metric-value" id="metricScale">0.50 μm / px</span>
+                        </div>
+                    </div>
+
+                    <!-- Clinical Protocol Summary -->
+                    <div class="protocol-box">
+                        <h4>Pathologist Protocol & Recommendation</h4>
+                        <p id="recommendationText">Clinical correlation required.</p>
+                    </div>
+
+                    <!-- PDF Report Download Button -->
+                    <div class="report-action">
+                        <button class="btn btn-success btn-block" id="downloadReportBtn">
+                            📥 Download Clinical Pathology PDF Report
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

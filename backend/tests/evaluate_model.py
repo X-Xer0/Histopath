@@ -50,7 +50,8 @@ def run_evaluation(sample_slides_dir: Path = None) -> Dict[str, Any]:
     if sample_slides_dir is None:
         sample_slides_dir = ROOT_DIR / "sample_test_slides"
         
-    slide_files = list(sample_slides_dir.glob("*.png")) + list(sample_slides_dir.glob("*.jpg"))
+    all_files = list(sample_slides_dir.glob("*.png")) + list(sample_slides_dir.glob("*.jpg")) + list(sample_slides_dir.glob("*.bmp"))
+    slide_files = [f for f in all_files if not f.stem.endswith("_mask")]
     
     if not slide_files:
         print(f"[WARN] No test slides found in {sample_slides_dir}")
@@ -75,9 +76,17 @@ def run_evaluation(sample_slides_dir: Path = None) -> Dict[str, Any]:
         metrics = calculate_spatial_metrics(pred_mask)
         grading = predict_tumor_severity_grade(metrics["tumor_burden_percent"])
         
-        # Extract hematoxylin threshold ground truth baseline for evaluation comparison
-        h_channel = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-        _, target_mask = cv2.threshold(h_channel, 0, 1, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # Check for real ground truth annotation mask
+        gt_mask_path = sample_slides_dir / f"{slide_path.stem}_mask{slide_path.suffix}"
+        if not gt_mask_path.exists():
+            gt_mask_path = sample_slides_dir / f"{slide_path.stem}_mask.png"
+            
+        if gt_mask_path.exists():
+            target_raw = cv2.imread(str(gt_mask_path), cv2.IMREAD_GRAYSCALE)
+            target_mask = (target_raw > 127).astype(np.uint8)
+        else:
+            h_channel = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            _, target_mask = cv2.threshold(h_channel, 0, 1, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         
         eval_metrics = compute_segmentation_metrics(pred_mask, target_mask)
         

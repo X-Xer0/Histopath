@@ -57,8 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     function handleFileSelect(file) {
-        if (!file.type.startsWith('image/')) {
-            alert('Please select a valid image file (PNG/JPG/TIFF).');
+        const validExtensions = ['.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.webp', '.svs'];
+        const fileName = (file.name || '').toLowerCase();
+        const hasValidExt = validExtensions.some(ext => fileName.endsWith(ext));
+        
+        if (!file.type.startsWith('image/') && !hasValidExt) {
+            alert('Please select a valid microscopic biopsy slide (PNG, JPG, TIFF, BMP, WEBP, SVS).');
             return;
         }
         
@@ -78,13 +82,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 resultsContent.style.display = 'none';
                 loadingSpinner.style.display = 'none';
             };
+            originalImage.onerror = () => {
+                // Browser cannot decode TIFF/SVS natively, but backend will decode it!
+                maskImage = null;
+                dropzone.style.display = 'none';
+                canvasWrapper.style.display = 'flex';
+                actionBar.style.display = 'flex';
+                sliderGroup.style.display = 'none';
+                
+                slideCanvas.width = 512;
+                slideCanvas.height = 384;
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 0, 512, 384);
+                ctx.fillStyle = '#60a5fa';
+                ctx.font = 'bold 16px Outfit, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Slide Loaded: ${file.name}`, 256, 180);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '13px Outfit, sans-serif';
+                ctx.fillText('Click "Run Tumor Segmentation" to analyze', 256, 210);
+                
+                emptyResults.style.display = 'block';
+                resultsContent.style.display = 'none';
+                loadingSpinner.style.display = 'none';
+            };
             originalImage.src = event.target.result;
         };
         reader.readAsDataURL(file);
     }
     
     function renderCanvas() {
-        if (!originalImage) return;
+        if (!originalImage || !originalImage.complete || originalImage.naturalWidth === 0) return;
         
         slideCanvas.width = originalImage.width;
         slideCanvas.height = originalImage.height;
@@ -146,16 +174,26 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const data = await response.json();
             
-            // Load overlay Base64 onto canvas
-            maskImage = new Image();
-            maskImage.onload = () => {
-                renderCanvas();
-                sliderGroup.style.display = 'flex';
-                loadingSpinner.style.display = 'none';
-                resultsContent.style.display = 'flex';
-                analyzeBtn.disabled = false;
+            // If original image wasn't decoded by browser (e.g. TIFF/BMP), use backend original_base64
+            const finishRender = () => {
+                maskImage = new Image();
+                maskImage.onload = () => {
+                    renderCanvas();
+                    sliderGroup.style.display = 'flex';
+                    loadingSpinner.style.display = 'none';
+                    resultsContent.style.display = 'flex';
+                    analyzeBtn.disabled = false;
+                };
+                maskImage.src = data.overlay_base64;
             };
-            maskImage.src = data.overlay_base64;
+
+            if (data.original_base64 && (!originalImage || !originalImage.complete || originalImage.naturalWidth === 0)) {
+                originalImage = new Image();
+                originalImage.onload = finishRender;
+                originalImage.src = data.original_base64;
+            } else {
+                finishRender();
+            }
             
             // Update Dashboard Metrics
             const m = data.metrics;

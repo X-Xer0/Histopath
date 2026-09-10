@@ -38,6 +38,28 @@ app.add_middleware(
 # Path to static frontend files
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
 
+import io
+from PIL import Image
+
+def decode_image_bytes(contents: bytes) -> np.ndarray:
+    """Robustly decodes image bytes (PNG, JPG, TIFF, WEBP, RGBA) to 3-channel BGR numpy array."""
+    nparr = np.frombuffer(contents, np.uint8)
+    img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    if img_bgr is None:
+        try:
+            pil_img = Image.open(io.BytesIO(contents))
+            pil_img = pil_img.convert("RGB")
+            img_rgb = np.array(pil_img)
+            img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            return None
+            
+    if img_bgr is not None and len(img_bgr.shape) == 3 and img_bgr.shape[2] == 4:
+        img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_BGRA2BGR)
+        
+    return img_bgr
+
 @app.get("/api/health")
 def health_check():
     return {
@@ -54,11 +76,10 @@ async def predict_tissue_slide(
 ):
     try:
         contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        img_bgr = decode_image_bytes(contents)
         
         if img_bgr is None:
-            raise HTTPException(status_code=400, detail="Invalid image file format")
+            raise HTTPException(status_code=400, detail="Invalid image file format. Supported: PNG, JPG, JPEG, TIFF, WEBP")
             
         # Run segmentation engine
         binary_mask, overlay_bgr = engine.predict(img_bgr)
@@ -69,10 +90,12 @@ async def predict_tissue_slide(
         # Predict tumor grade
         grading = predict_tumor_severity_grade(metrics["tumor_burden_percent"])
         
-        # Encode overlay and mask to Base64 PNGs
+        # Encode original image, overlay, and mask to Base64 PNGs
+        _, orig_png = cv2.imencode(".png", img_bgr)
         _, mask_png = cv2.imencode(".png", (binary_mask * 255).astype(np.uint8))
         _, overlay_png = cv2.imencode(".png", overlay_bgr)
         
+        orig_base64 = base64.b64encode(orig_png).decode("utf-8")
         mask_base64 = base64.b64encode(mask_png).decode("utf-8")
         overlay_base64 = base64.b64encode(overlay_png).decode("utf-8")
         
@@ -81,6 +104,7 @@ async def predict_tissue_slide(
             "filename": file.filename,
             "metrics": metrics,
             "grading": grading,
+            "original_base64": f"data:image/png;base64,{orig_base64}",
             "mask_base64": f"data:image/png;base64,{mask_base64}",
             "overlay_base64": f"data:image/png;base64,{overlay_base64}"
         }
@@ -96,11 +120,10 @@ async def generate_pdf_report(
 ):
     try:
         contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        img_bgr = decode_image_bytes(contents)
         
         if img_bgr is None:
-            raise HTTPException(status_code=400, detail="Invalid image file format")
+            raise HTTPException(status_code=400, detail="Invalid image file format. Supported: PNG, JPG, JPEG, TIFF, WEBP")
             
         binary_mask, overlay_bgr = engine.predict(img_bgr)
         metrics = calculate_spatial_metrics(binary_mask, pixel_scale_um=pixel_scale_um)

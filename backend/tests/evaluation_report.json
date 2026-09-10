@@ -1,176 +1,316 @@
 {
-  "mean_dice_score": 0.5093,
-  "mean_iou_jaccard": 0.4288,
-  "mean_precision": 0.8447,
-  "mean_recall_sensitivity": 0.4437,
-  "evaluated_slides_count": 12,
+  "mean_dice_score": 0.344,
+  "mean_iou_jaccard": 0.2557,
+  "mean_precision": 0.6702,
+  "mean_recall_sensitivity": 0.4444,
+  "evaluated_slides_count": 22,
   "slides": [
     {
-      "filename": "Sample1_Low_Grade_Tissue.png",
-      "tumor_burden_pct": 5.65,
-      "tumor_area_mm2": 0.0037,
-      "predicted_grade": "Grade I",
-      "evaluation_metrics": {
-        "dice_score": 0.8316,
-        "iou_jaccard": 0.7117,
-        "precision": 0.9228,
-        "recall_sensitivity": 0.7568,
-        "specificity": 0.9953,
-        "pixel_accuracy": 0.9789
-      }
-    },
-    {
-      "filename": "Sample2_Moderate_Grade_Tissue.png",
-      "tumor_burden_pct": 16.45,
-      "tumor_area_mm2": 0.0108,
-      "predicted_grade": "Grade II",
-      "evaluation_metrics": {
-        "dice_score": 0.908,
-        "iou_jaccard": 0.8315,
-        "precision": 0.9733,
-        "recall_sensitivity": 0.8509,
-        "specificity": 0.9946,
-        "pixel_accuracy": 0.9676
-      }
-    },
-    {
-      "filename": "Sample3_High_Grade_Invasive_Tissue.png",
-      "tumor_burden_pct": 36.47,
-      "tumor_area_mm2": 0.0239,
-      "predicted_grade": "Grade III",
-      "evaluation_metrics": {
-        "dice_score": 0.9682,
-        "iou_jaccard": 0.9383,
-        "precision": 0.9902,
-        "recall_sensitivity": 0.9471,
-        "specificity": 0.9942,
-        "pixel_accuracy": 0.9762
-      }
-    },
-    {
       "filename": "Screenshot_25-Nov_22-42-56_1762.png",
-      "tumor_burden_pct": 0.47,
-      "tumor_area_mm2": 0.0024,
+      "tumor_burden_pct": 2.91,
+      "tumor_area_mm2": 0.0151,
       "predicted_grade": "Grade I",
       "evaluation_metrics": {
-        "dice_score": 0.009,
-        "iou_jaccard": 0.0045,
-        "precision": 0.8515,
-        "recall_sensitivity": 0.0045,
-        "specificity": 0.9945,
-        "pixel_accuracy": 0.1293
+        "dice_score": 0.0577,
+        "iou_jaccard": 0.0297,
+        "precision": 0.8939,
+        "recall_sensitivity": 0.0298,
+        "specificity": 0.9755,
+        "pixel_accuracy": 0.149
       }
     },
     {
       "filename": "Screenshot_31-Dec_23-51-43_7373.png",
-      "tumor_burden_pct": 0.23,
-      "tumor_area_mm2": 0.0012,
+      "tumor_burden_pct": 11.38,
+      "tumor_area_mm2": 0.059,
       "predicted_grade": "Grade I",
       "evaluation_metrics": {
-        "dice_score": 0.0077,
-        "iou_jaccard": 0.0039,
-        "precision": 0.9771,
-        "recall_sensitivity": 0.0039,
-        "specificity": 0.9999,
-        "pixel_accuracy": 0.427
+        "dice_score": 0.0264,
+        "iou_jaccard": 0.0134,
+        "precision": 0.0798,
+        "recall_sensitivity": 0.0158,
+        "specificity": 0.7534,
+        "pixel_accuracy": 0.3291
       }
     },
     {
       "filename": "swappy-20260827-170626.png",
-      "tumor_burden_pct": 10.79,
-      "tumor_area_mm2": 0.003,
-      "predicted_grade": "Grade I",
+      "tumor_burden_pct": 20.29,
+      "tumor_area_mm2": 0.0057,
+      "predicted_grade": "Grade II",
       "evaluation_metrics": {
-        "dice_score": 0.7814,
-        "iou_jaccard": 0.6413,
-        "precision": 0.9355,
-        "recall_sensitivity": 0.6709,
-        "specificity": 0.9918,
-        "pixel_accuracy": 0.9436
+        "dice_score": 0.7644,
+        "iou_jaccard": 0.6186,
+        "precision": 0.6655,
+        "recall_sensitivity": 0.8978,
+        "specificity": 0.9201,
+        "pixel_accuracy": 0.9168
       }
     },
     {
       "filename": "swappy-20260827-170635.png",
-      "tumor_burden_pct": 10.79,
-      "tumor_area_mm2": 0.003,
-      "predicted_grade": "Grade I",
+      "tumor_burden_pct": 20.29,
+      "tumor_area_mm2": 0.0057,
+      "predicted_grade": "Grade II",
       "evaluation_metrics": {
-        "dice_score": 0.7814,
-        "iou_jaccard": 0.6413,
-        "precision": 0.9355,
-        "recall_sensitivity": 0.6709,
-        "specificity": 0.9918,
-        "pixel_accuracy": 0.9436
+        "dice_score": 0.7644,
+        "iou_jaccard": 0.6186,
+        "precision": 0.6655,
+        "recall_sensitivity": 0.8978,
+        "specificity": 0.9201,
+        "pixel_accuracy": 0.9168
       }
     },
     {
       "filename": "swappy-20260827-170636.png",
-      "tumor_burden_pct": 10.79,
-      "tumor_area_mm2": 0.003,
-      "predicted_grade": "Grade I",
+      "tumor_burden_pct": 20.29,
+      "tumor_area_mm2": 0.0057,
+      "predicted_grade": "Grade II",
       "evaluation_metrics": {
-        "dice_score": 0.7814,
-        "iou_jaccard": 0.6413,
-        "precision": 0.9355,
-        "recall_sensitivity": 0.6709,
-        "specificity": 0.9918,
-        "pixel_accuracy": 0.9436
+        "dice_score": 0.7644,
+        "iou_jaccard": 0.6186,
+        "precision": 0.6655,
+        "recall_sensitivity": 0.8978,
+        "specificity": 0.9201,
+        "pixel_accuracy": 0.9168
       }
     },
     {
       "filename": "swappy-20260827-180843.png",
-      "tumor_burden_pct": 3.79,
-      "tumor_area_mm2": 0.0012,
-      "predicted_grade": "Grade I",
-      "evaluation_metrics": {
-        "dice_score": 0.3125,
-        "iou_jaccard": 0.1852,
-        "precision": 0.8984,
-        "recall_sensitivity": 0.1891,
-        "specificity": 0.9953,
-        "pixel_accuracy": 0.8502
-      }
-    },
-    {
-      "filename": "swappy-20260827-180858.png",
-      "tumor_burden_pct": 14.13,
-      "tumor_area_mm2": 0.0034,
-      "predicted_grade": "Grade I",
-      "evaluation_metrics": {
-        "dice_score": 0.6885,
-        "iou_jaccard": 0.525,
-        "precision": 0.9599,
-        "recall_sensitivity": 0.5368,
-        "specificity": 0.9924,
-        "pixel_accuracy": 0.8773
-      }
-    },
-    {
-      "filename": "swappy-20260827-180919.png",
-      "tumor_burden_pct": 0.06,
+      "tumor_burden_pct": 0.0,
       "tumor_area_mm2": 0.0,
       "predicted_grade": "Grade I",
       "evaluation_metrics": {
         "dice_score": 0.0001,
-        "iou_jaccard": 0.0001,
-        "precision": 0.08,
-        "recall_sensitivity": 0.0001,
-        "specificity": 0.9896,
-        "pixel_accuracy": 0.056
+        "iou_jaccard": 0.0,
+        "precision": 1.0,
+        "recall_sensitivity": 0.0,
+        "specificity": 1.0,
+        "pixel_accuracy": 0.82
+      }
+    },
+    {
+      "filename": "swappy-20260827-180858.png",
+      "tumor_burden_pct": 0.06,
+      "tumor_area_mm2": 0.0,
+      "predicted_grade": "Grade I",
+      "evaluation_metrics": {
+        "dice_score": 0.0029,
+        "iou_jaccard": 0.0015,
+        "precision": 0.6316,
+        "recall_sensitivity": 0.0015,
+        "specificity": 0.9997,
+        "pixel_accuracy": 0.7474
+      }
+    },
+    {
+      "filename": "swappy-20260827-180919.png",
+      "tumor_burden_pct": 36.99,
+      "tumor_area_mm2": 0.0108,
+      "predicted_grade": "Grade III",
+      "evaluation_metrics": {
+        "dice_score": 0.5168,
+        "iou_jaccard": 0.3485,
+        "precision": 0.9175,
+        "recall_sensitivity": 0.3597,
+        "specificity": 0.4601,
+        "pixel_accuracy": 0.3654
       }
     },
     {
       "filename": "swappy-20260827-180934.png",
-      "tumor_burden_pct": 2.62,
-      "tumor_area_mm2": 0.0006,
+      "tumor_burden_pct": 26.44,
+      "tumor_area_mm2": 0.0065,
+      "predicted_grade": "Grade II",
+      "evaluation_metrics": {
+        "dice_score": 0.3526,
+        "iou_jaccard": 0.214,
+        "precision": 0.7183,
+        "recall_sensitivity": 0.2336,
+        "specificity": 0.6023,
+        "pixel_accuracy": 0.3027
+      }
+    },
+    {
+      "filename": "swappy-20260901-233205.png",
+      "tumor_burden_pct": 30.91,
+      "tumor_area_mm2": 0.0142,
+      "predicted_grade": "Grade II",
+      "evaluation_metrics": {
+        "dice_score": 0.6246,
+        "iou_jaccard": 0.4541,
+        "precision": 0.983,
+        "recall_sensitivity": 0.4577,
+        "specificity": 0.9844,
+        "pixel_accuracy": 0.6347
+      }
+    },
+    {
+      "filename": "real_monuseg_breast_0.png",
+      "tumor_burden_pct": 25.71,
+      "tumor_area_mm2": 0.0643,
+      "predicted_grade": "Grade II",
+      "evaluation_metrics": {
+        "dice_score": 0.6978,
+        "iou_jaccard": 0.5359,
+        "precision": 0.9281,
+        "recall_sensitivity": 0.5591,
+        "specificity": 0.9677,
+        "pixel_accuracy": 0.7933
+      }
+    },
+    {
+      "filename": "real_monuseg_liver_1.png",
+      "tumor_burden_pct": 25.76,
+      "tumor_area_mm2": 0.0644,
+      "predicted_grade": "Grade II",
+      "evaluation_metrics": {
+        "dice_score": 0.7001,
+        "iou_jaccard": 0.5386,
+        "precision": 0.9301,
+        "recall_sensitivity": 0.5613,
+        "specificity": 0.9686,
+        "pixel_accuracy": 0.7947
+      }
+    },
+    {
+      "filename": "real_monuseg_kidney_10.png",
+      "tumor_burden_pct": 21.7,
+      "tumor_area_mm2": 0.0542,
+      "predicted_grade": "Grade II",
+      "evaluation_metrics": {
+        "dice_score": 0.6992,
+        "iou_jaccard": 0.5375,
+        "precision": 0.8804,
+        "recall_sensitivity": 0.5799,
+        "specificity": 0.9613,
+        "pixel_accuracy": 0.8357
+      }
+    },
+    {
+      "filename": "slide-10093-1.jpg",
+      "tumor_burden_pct": 7.44,
+      "tumor_area_mm2": 0.0017,
       "predicted_grade": "Grade I",
       "evaluation_metrics": {
-        "dice_score": 0.0423,
-        "iou_jaccard": 0.0216,
-        "precision": 0.6766,
-        "recall_sensitivity": 0.0219,
-        "specificity": 0.9547,
-        "pixel_accuracy": 0.1965
+        "dice_score": 0.1886,
+        "iou_jaccard": 0.1041,
+        "precision": 0.9837,
+        "recall_sensitivity": 0.1043,
+        "specificity": 0.9959,
+        "pixel_accuracy": 0.3701
+      }
+    },
+    {
+      "filename": "slide-10093-5.jpg",
+      "tumor_burden_pct": 29.48,
+      "tumor_area_mm2": 0.0066,
+      "predicted_grade": "Grade II",
+      "evaluation_metrics": {
+        "dice_score": 0.5208,
+        "iou_jaccard": 0.3521,
+        "precision": 0.6963,
+        "recall_sensitivity": 0.416,
+        "specificity": 0.8233,
+        "pixel_accuracy": 0.6223
+      }
+    },
+    {
+      "filename": "apptop2-10160-351x233.jpg",
+      "tumor_burden_pct": 5.96,
+      "tumor_area_mm2": 0.0012,
+      "predicted_grade": "Grade I",
+      "evaluation_metrics": {
+        "dice_score": 0.19,
+        "iou_jaccard": 0.105,
+        "precision": 0.3256,
+        "recall_sensitivity": 0.1342,
+        "specificity": 0.953,
+        "pixel_accuracy": 0.8345
+      }
+    },
+    {
+      "filename": "slide-10160-1.jpg",
+      "tumor_burden_pct": 0.0,
+      "tumor_area_mm2": 0.0,
+      "predicted_grade": "Grade I",
+      "evaluation_metrics": {
+        "dice_score": 0.0,
+        "iou_jaccard": 0.0,
+        "precision": 1.0,
+        "recall_sensitivity": 0.0,
+        "specificity": 1.0,
+        "pixel_accuracy": 0.8807
+      }
+    },
+    {
+      "filename": "slide-10119-1.jpg",
+      "tumor_burden_pct": 0.0,
+      "tumor_area_mm2": 0.0,
+      "predicted_grade": "Grade I",
+      "evaluation_metrics": {
+        "dice_score": 0.0,
+        "iou_jaccard": 0.0,
+        "precision": 1.0,
+        "recall_sensitivity": 0.0,
+        "specificity": 1.0,
+        "pixel_accuracy": 0.8052
+      }
+    },
+    {
+      "filename": "slide-10118-2.jpg",
+      "tumor_burden_pct": 39.55,
+      "tumor_area_mm2": 0.0089,
+      "predicted_grade": "Grade III",
+      "evaluation_metrics": {
+        "dice_score": 0.6971,
+        "iou_jaccard": 0.535,
+        "precision": 0.7801,
+        "recall_sensitivity": 0.63,
+        "specificity": 0.8296,
+        "pixel_accuracy": 0.7319
+      }
+    },
+    {
+      "filename": "real_glas_colon_testA_1.bmp",
+      "tumor_burden_pct": 7.44,
+      "tumor_area_mm2": 0.0075,
+      "predicted_grade": "Grade I",
+      "evaluation_metrics": {
+        "dice_score": 0.0,
+        "iou_jaccard": 0.0,
+        "precision": 0.0,
+        "recall_sensitivity": 1.0,
+        "specificity": 0.9256,
+        "pixel_accuracy": 0.9256
+      }
+    },
+    {
+      "filename": "real_glas_colon_testA_2.bmp",
+      "tumor_burden_pct": 53.95,
+      "tumor_area_mm2": 0.036,
+      "predicted_grade": "Grade III",
+      "evaluation_metrics": {
+        "dice_score": 0.0,
+        "iou_jaccard": 0.0,
+        "precision": 0.0,
+        "recall_sensitivity": 1.0,
+        "specificity": 0.4605,
+        "pixel_accuracy": 0.4605
+      }
+    },
+    {
+      "filename": "real_glas_colon_testA_3.bmp",
+      "tumor_burden_pct": 12.04,
+      "tumor_area_mm2": 0.0077,
+      "predicted_grade": "Grade I",
+      "evaluation_metrics": {
+        "dice_score": 0.0,
+        "iou_jaccard": 0.0,
+        "precision": 0.0,
+        "recall_sensitivity": 1.0,
+        "specificity": 0.8796,
+        "pixel_accuracy": 0.8796
       }
     }
   ]

@@ -59,13 +59,33 @@ do this; keep it that way.
 
 ## 3. API contract
 
+**The web UI uses the asynchronous endpoints.** Segmenting a full slide takes
+25–80 s, and the reverse proxy in front of the app returns **HTTP 504 after about
+15 s** (measured on the deployed host: a 256×256 image with 1 tile succeeded in
+5 s, a 512×512 image with 9 tiles was cut off at 15.4 s). A synchronous request
+therefore cannot work in production, so analysis is queued and polled.
+
 | Method | Endpoint | Payload | Returns |
 |---|---|---|---|
-| GET | `/api/health` | — | status, engine, calibration default, scope note |
-| POST | `/api/predict` | `file`, `pixel_scale_um=0.5`, `precise_mode=false` | metrics + 4 Base64 PNGs |
-| POST | `/api/export-csv` | `file`, `pixel_scale_um`, `precise_mode` | per-nucleus CSV |
-| POST | `/api/generate-report` | `file`, `pixel_scale_um`, `precise_mode`, `sample_id` | PDF byte stream |
+| GET | `/api/health` | — | status, engine, calibration default, poll interval, scope note |
+| **POST** | **`/api/analyse`** | `file`, `pixel_scale_um=0.5`, `precise_mode=false` | **202 + `{job_id, poll_interval_ms}` immediately** |
+| **GET** | **`/api/job/{id}`** | — | `{status: pending\|running\|done\|error}`; the full result once done |
+| **GET** | **`/api/job/{id}/csv`** | — | per-nucleus CSV from the finished job |
+| **GET** | **`/api/job/{id}/report`** | `sample_id` (optional) | PDF from the finished job |
+| POST | `/api/predict` | `file`, `pixel_scale_um=0.5`, `precise_mode=false` | metrics + 4 Base64 images (synchronous; small images and local use) |
+| POST | `/api/export-csv` | `file`, `pixel_scale_um`, `precise_mode` | per-nucleus CSV (synchronous) |
+| POST | `/api/generate-report` | `file`, `pixel_scale_um`, `precise_mode`, `sample_id` | PDF byte stream (synchronous) |
 | POST | `/api/upload-weights` | `.onnx` file | hot-reloads the engine |
+
+The CSV and PDF endpoints read the stored job result, so **one analysis can
+produce all three artefacts without re-running inference**. Jobs live in memory
+(`backend/app/jobs.py`), capped at the 3 most recent and expired after 15
+minutes, because the service has no database and results are disposable.
+
+**Display images are downscaled and JPEG-encoded** (mask stays PNG). Four PNG
+layers of a 1000×1000 slide came to ~11 MB of Base64 JSON; JPEG at quality 88
+brings the same response to ~1.2 MB. Measurements are always computed at full
+resolution — only the pictures shown to the user are scaled.
 
 `POST /api/predict` returns:
 

@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyResults = el('emptyResults');
     const loadingSpinner = el('loadingSpinner');
     const loadingText = el('loadingText');
+    const loadingTimer = el('loadingTimer');
     const resultsContent = el('resultsContent');
     const downloadCsvBtn = el('downloadCsvBtn');
     const downloadReportBtn = el('downloadReportBtn');
@@ -35,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentFile = null;
     let views = { original: null, mask: null, overlay: null, instances: null };
     let activeView = 'overlay';
+    let currentJobId = null;      // set once an analysis finishes; downloads reuse it
+    let pollTimer = null;
 
     const VIEW_CAPTIONS = {
         original: 'Uploaded slide, unmodified',
@@ -76,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleFileSelect(file) {
         currentFile = file;
+        currentJobId = null;
         views = { original: null, mask: null, overlay: null, instances: null };
         activeView = 'overlay';
         setActiveToggle('overlay');
@@ -166,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetBtn.addEventListener('click', () => {
         currentFile = null;
+        currentJobId = null;
         views = { original: null, mask: null, overlay: null, instances: null };
         dropzone.style.display = 'block';
         canvasWrapper.style.display = 'none';
@@ -187,6 +192,26 @@ document.addEventListener('DOMContentLoaded', () => {
         return fd;
     }
 
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    function startTimer() {
+        const t0 = Date.now();
+        loadingTimer.textContent = '0 s';
+        clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+            loadingTimer.textContent = `${Math.round((Date.now() - t0) / 1000)} s`;
+        }, 1000);
+    }
+    function stopTimer() {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
+    /**
+     * Segmentation of a full slide takes far longer than the hosting proxy will
+     * hold a request open (it returns 504 after ~15 s), so the work is queued on
+     * the server and this polls for the result.
+     */
     analyzeBtn.addEventListener('click', async () => {
         if (!currentFile) return;
 
@@ -194,17 +219,39 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContent.style.display = 'none';
         loadingSpinner.style.display = 'block';
         loadingText.textContent = preciseToggle.checked
-            ? 'Segmenting nuclei with 8× test-time augmentation… (slower)'
-            : 'Segmenting nuclei…';
+            ? 'Queued: segmenting with 8× test-time augmentation (slower)'
+            : 'Processing slide…';
         analyzeBtn.disabled = true;
+        startTimer();
 
         try {
-            const res = await fetch('/api/predict', { method: 'POST', body: buildForm() });
+            const res = await fetch('/api/analyse', { method: 'POST', body: buildForm() });
             if (!res.ok) {
                 const detail = await res.json().catch(() => ({}));
                 throw new Error(detail.detail || `Server returned ${res.status}`);
             }
-            const data = await res.json();
+            const accepted = await res.json();
+            const jobId = accepted.job_id;
+            const interval = accepted.poll_interval_ms || 1500;
+
+            let data = null;
+            for (;;) {
+                await sleep(interval);
+                const poll = await fetch(`/api/job/${jobId}`);
+                if (!poll.ok) {
+                    const detail = await poll.json().catch(() => ({}));
+                    throw new Error(detail.detail || `Polling failed (${poll.status})`);
+                }
+                const state = await poll.json();
+
+                if (state.status === 'error') throw new Error(state.error || 'Analysis failed');
+                if (state.status === 'done') { data = state; break; }
+                loadingText.textContent = state.status === 'running'
+                    ? 'Segmenting nuclei…'
+                    : 'Waiting for a free worker…';
+            }
+
+            currentJobId = jobId;
 
             await loadImages(data);
             renderMetrics(data.metrics, data.engine, data.precise_mode);
@@ -219,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
             emptyResults.style.display = 'block';
             alert(`Analysis failed: ${err.message}`);
         } finally {
+            stopTimer();
             analyzeBtn.disabled = false;
         }
     });
@@ -346,9 +394,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ---------------- downloads ---------------- */
     async function downloadFrom(endpoint, fallbackName) {
-        if (!currentFile) return;
-        const res = await fetch(endpoint, { method: 'POST', body: buildForm() });
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        if (!currentJobId) {
+            throw new Error('Run the analysis first — the export reuses its result.');
+        }
+        const res = await fetch(endpoint);
+        if (!res.ok) {
+            const detail = await res.json().catch(() => ({}));
+            throw new Error(detail.detail || `Server returned ${res.status}`);
+        }
         const blob = await res.blob();
 
         const disposition = res.headers.get('Content-Disposition') || '';
@@ -370,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadCsvBtn.disabled = true;
         downloadCsvBtn.textContent = 'Generating CSV…';
         try {
-            await downloadFrom('/api/export-csv', 'nuclei.csv');
+            await downloadFrom(`/api/job/${currentJobId}/csv`, 'nuclei.csv');
         } catch (err) {
             alert(`CSV export failed: ${err.message}`);
         } finally {
@@ -384,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadReportBtn.disabled = true;
         downloadReportBtn.textContent = 'Generating report…';
         try {
-            await downloadFrom('/api/generate-report', 'Nuclei_Report.pdf');
+            await downloadFrom(`/api/job/${currentJobId}/report`, 'Nuclei_Report.pdf');
         } catch (err) {
             alert(`Report generation failed: ${err.message}`);
         } finally {

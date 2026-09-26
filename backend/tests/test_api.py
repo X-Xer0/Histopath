@@ -7,6 +7,7 @@ Run with:  python -m pytest backend/tests/test_api.py -q
 
 import io
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -204,6 +205,105 @@ class TestTilingCoverage(unittest.TestCase):
         self.assertAlmostEqual(float(prob.min()), 1.0, places=5)
 
 
+class TestAsyncJobFlow(unittest.TestCase):
+    """
+    The web UI cannot use the synchronous endpoint: a full slide takes longer
+    than the hosting proxy's ~15 s timeout, which returned HTTP 504 in
+    production. These tests cover the queued flow that replaced it.
+    """
+
+    def _submit(self, img=None, **form):
+        files = {"file": ("slide.png", encode_png(img if img is not None else synthetic_slide()), "image/png")}
+        data = {"pixel_scale_um": 0.5, "precise_mode": False}
+        data.update(form)
+        r = client.post("/api/analyse", files=files, data=data)
+        self.assertEqual(r.status_code, 202, r.text)
+        body = r.json()
+        self.assertIn("job_id", body)
+        self.assertIn("poll_interval_ms", body)
+        return body["job_id"]
+
+    def _wait(self, job_id, timeout=120, interval=0.4):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            state = client.get(f"/api/job/{job_id}").json()
+            if state["status"] in ("done", "error"):
+                return state
+            time.sleep(interval)
+        self.fail(f"job {job_id} did not finish within {timeout}s")
+
+    def test_job_completes_and_returns_metrics(self):
+        job_id = self._submit()
+        state = self._wait(job_id)
+        self.assertEqual(state["status"], "done", state.get("error"))
+
+        for key in ("metrics", "filename", "engine", "elapsed_seconds", "nucleus_rows"):
+            self.assertIn(key, state)
+        for key in ("original_base64", "mask_base64", "overlay_base64", "instance_base64"):
+            self.assertTrue(state[key].startswith("data:image/"))
+
+    def test_queueing_is_immediate(self):
+        """The whole point: the POST must not wait for the inference."""
+        t0 = time.time()
+        self._submit()
+        self.assertLess(time.time() - t0, 5.0, "queueing blocked for too long")
+
+    def test_job_status_before_completion(self):
+        job_id = self._submit()
+        state = client.get(f"/api/job/{job_id}").json()
+        self.assertIn(state["status"], ("pending", "running", "done"))
+        self.assertNotIn("metrics", state) if state["status"] != "done" else None
+
+    def test_csv_and_pdf_reuse_the_finished_job(self):
+        job_id = self._submit()
+        self._wait(job_id)
+
+        csv_resp = client.get(f"/api/job/{job_id}/csv")
+        self.assertEqual(csv_resp.status_code, 200)
+        self.assertIn("text/csv", csv_resp.headers["content-type"])
+        self.assertEqual(
+            csv_resp.text.splitlines()[0],
+            "nucleus_id,area_px,area_um2,equivalent_diameter_um,centroid_x_px,centroid_y_px",
+        )
+
+        pdf_resp = client.get(f"/api/job/{job_id}/report")
+        self.assertEqual(pdf_resp.status_code, 200)
+        self.assertEqual(pdf_resp.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf_resp.content.startswith(b"%PDF"))
+
+    def test_artifacts_conflict_while_running(self):
+        """A job that is still running must not serve half a result."""
+        job_id = self._submit(synthetic_slide(512))
+        try:
+            resp = client.get(f"/api/job/{job_id}/csv")
+            if resp.status_code == 409:
+                self.assertIn("not finished", resp.json()["detail"])
+        finally:
+            self._wait(job_id)
+
+    def test_unknown_job_is_404(self):
+        self.assertEqual(client.get("/api/job/doesnotexist").status_code, 404)
+        self.assertEqual(client.get("/api/job/doesnotexist/csv").status_code, 404)
+        self.assertEqual(client.get("/api/job/doesnotexist/report").status_code, 404)
+
+    def test_bad_upload_fails_immediately(self):
+        """Rejected before a job slot is consumed."""
+        files = {"file": ("bad.png", b"not an image", "image/png")}
+        r = client.post("/api/analyse", files=files)
+        self.assertEqual(r.status_code, 400)
+
+    def test_display_images_are_downscaled(self):
+        """A big slide must not come back as a multi-megabyte JSON payload."""
+        job_id = self._submit(synthetic_slide(1600))
+        state = self._wait(job_id)
+        self.assertEqual(state["status"], "done", state.get("error"))
+
+        import base64 as b64
+        raw = b64.b64decode(state["original_base64"].split(",", 1)[1])
+        arr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        self.assertLessEqual(max(arr.shape[:2]), 900)
+
+
 class TestAPI(unittest.TestCase):
 
     def test_health(self):
@@ -223,7 +323,10 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(d["status"], "success")
 
         for key in ("original_base64", "mask_base64", "overlay_base64", "instance_base64"):
-            self.assertTrue(d[key].startswith("data:image/png;base64,"))
+            self.assertTrue(d[key].startswith("data:image/"), key)
+        # the mask stays lossless PNG; the photographic layers are JPEG
+        self.assertTrue(d["mask_base64"].startswith("data:image/png;base64,"))
+        self.assertTrue(d["original_base64"].startswith("data:image/jpeg;base64,"))
 
         m = d["metrics"]
         for key in ("nuclei_count", "nuclear_density_percent", "mean_equivalent_diameter_um",

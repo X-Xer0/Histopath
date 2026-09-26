@@ -141,7 +141,40 @@ compete for the same cores. Concurrency is handled by the thread pool instead.
 
 ---
 
-## 5. Verify the deployment
+## 5. The 504 you will hit if you use the old synchronous endpoint
+
+Segmenting a full slide takes longer than Sevalla's proxy will wait. Measured
+against the live deployment:
+
+| Request | Result |
+|---|---|
+| `GET /api/health` | 200 in 0.28 s |
+| `POST /api/predict`, 256×256 image (1 tile) | **200** in 5.6 s |
+| `POST /api/predict`, 512×512 image (9 tiles) | **504** after 15.4 s |
+
+So the proxy timeout is roughly **15 seconds**, and it is not configurable in the
+Networking settings. A 1000×1000 slide needs 16 tiles — about 50–80 s on an S1 pod
+— so a synchronous predict can never work there.
+
+The application therefore exposes a queued flow and the UI uses it:
+
+```
+POST /api/analyse   -> 202 { job_id }          returns in milliseconds
+GET  /api/job/{id}  -> { status: running }      poll every 1.5 s
+                    -> { status: done, metrics, images }   when finished
+GET  /api/job/{id}/csv       per-nucleus CSV   served from the stored result
+GET  /api/job/{id}/report    PDF report        served from the stored result
+```
+
+The synchronous endpoints still exist for small images and local development; the
+browser does not use them.
+
+**If you deploy the older revision, this is the failure you will see.** Pull the
+current code and redeploy.
+
+---
+
+## 6. Verify the deployment
 
 Open the application URL (the **View** button on the Overview page) and check:
 
@@ -166,16 +199,24 @@ make it into the image — check that `backend/models/tumor_unet.onnx` is commit
 and that `.dockerignore` does not exclude it.
 
 Then open the UI in a browser, upload one of the slides from `samples/`, and run
-the segmentation. First inference will be slower than the numbers in §2 because
-the machine is cold.
+the segmentation. The page shows a running timer while the job is queued and
+processed; **expect 1–2 minutes on S1** for a 1000×1000 slide, and longer on the
+first request because the container is cold.
 
-**Expect the first upload to take 1–2 minutes on S1.** If the browser shows an
-error, check the application logs inside Sevalla — an OOM kill appears there as
-the container restarting.
+You can watch the same thing without a browser:
+
+```bash
+JOB=$(curl -s -F "file=@samples/monuseg_test_TCGA-HC-7209-01A-01-TS1.png" \
+      https://<your-app>.sevalla.app/api/analyse | python3 -c "import json,sys;print(json.load(sys.stdin)['job_id'])")
+curl -s https://<your-app>.sevalla.app/api/job/$JOB          # repeat until "done"
+```
+
+If the browser shows an error, check the application logs inside Sevalla — an OOM
+kill appears there as the container restarting.
 
 ---
 
-## 6. Keeping the cost down
+## 7. Keeping the cost down
 
 * **Hibernation** — Sevalla can pause a runtime pod when it is not in use. For a
   capstone demo this is the difference between $10 and a few dollars a month.
@@ -186,7 +227,7 @@ the container restarting.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -196,10 +237,11 @@ the container restarting.
 | Build fails on `pip install` | a dependency lost its wheel for 3.12 | all current deps have cp312 manylinux wheels; check the build log for which package |
 | Health check fails but the app runs | port mismatch | set `PORT=8000` explicitly and confirm Sevalla routes to the same port |
 | Slow first request | cold container | expected; subsequent requests reuse the loaded model |
+| `504` after ~15 s on a POST | calling the synchronous endpoint with a full slide | use `/api/analyse` + polling; see §5 |
 
 ---
 
-## 8. If free hosting matters more than Sevalla does
+## 9. If free hosting matters more than Sevalla does
 
 Worth knowing: **Hugging Face Docker Spaces now require a paid plan** (PRO), so
 that is no longer a free alternative despite the free CPU hardware table. Render's

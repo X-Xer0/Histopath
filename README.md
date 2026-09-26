@@ -119,10 +119,20 @@ python backend/tests/evaluate_model.py --precise    # benchmark with 8x TTA
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/api/health` | Service status, active engine, calibration default |
-| POST | `/api/predict` | Segment a slide; returns measurements and overlay images |
-| POST | `/api/export-csv` | Per-nucleus measurements as CSV |
-| POST | `/api/generate-report` | Nucleus morphometry report as a PDF stream |
+| **POST** | **`/api/analyse`** | **Queue an analysis, returns a `job_id` in milliseconds** |
+| **GET** | **`/api/job/{id}`** | **Poll a job; returns the measurements and overlay images when done** |
+| **GET** | **`/api/job/{id}/csv`** | Per-nucleus CSV from a finished job |
+| **GET** | **`/api/job/{id}/report`** | Morphometry PDF from a finished job |
+| POST | `/api/predict` | Synchronous segmentation (small images, local use) |
+| POST | `/api/export-csv` | Per-nucleus measurements as CSV (synchronous) |
+| POST | `/api/generate-report` | Nucleus morphometry report as a PDF stream (synchronous) |
 | POST | `/api/upload-weights` | Replace the ONNX model and hot-reload, no restart |
+
+**Why the UI polls rather than waits.** A full slide takes 25–80 s and the hosting
+proxy returns 504 after about 15 s, so a synchronous request cannot survive in
+production. The browser queues the work and polls. Because the finished job holds
+its result, the CSV and PDF downloads reuse that same analysis instead of running
+inference again.
 
 `/api/predict` accepts `file`, `pixel_scale_um` (default `0.5`) and
 `precise_mode` (default `false`), and returns:

@@ -183,6 +183,14 @@ input[type=range]::-webkit-slider-thumb{
     width:40px; height:40px; border-radius:50%;
     border:3px solid rgba(255,255,255,.1); border-top-color:var(--blue); animation:spin .85s linear infinite;
 }
+.loading-hint{
+    font-size:11.5px; line-height:1.6; color:var(--faint);
+    max-width:330px; margin-top:-4px;
+}
+.loading-timer{
+    font-family:var(--font-mono, ui-monospace, monospace);
+    font-size:13px; color:var(--cyan); letter-spacing:.06em;
+}
 @keyframes spin{ to{ transform:rotate(360deg); } }
 
 .results-content{ display:flex; flex-direction:column; gap:14px; }

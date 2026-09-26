@@ -88,10 +88,21 @@ docker compose up --build
 
 ### Deploying to Sevalla
 
-See [`SEVALLA_DEPLOYMENT.md`](SEVALLA_DEPLOYMENT.md). Two things to know up front:
-**Sevalla has no GPU option**, and the app peaks at **447 MB of RAM** during a
-1000×1000 inference, so the $5 Hobby pod (0.3 GB) will be killed — use Standard
-S1 (1 GB) or larger. Expect roughly 1–2 minutes per slide on S1.
+See [`SEVALLA_DEPLOYMENT.md`](SEVALLA_DEPLOYMENT.md). Three things to know up
+front:
+
+* **No GPU exists on Sevalla** — CPU containers only.
+* The app peaks at **447 MB of RAM** during a 1000×1000 inference, so the $5
+  Hobby pod (0.3 GB) is killed on the first request. Use Standard S1 (1 GB) or
+  larger, and expect roughly 1–2 minutes per slide there.
+* **Check `version` in `/api/health` after deploying.** A container that is still
+  serving an older build looks exactly like an application bug; comparing that
+  field against `backend/app/main.py` takes two seconds and has already saved a
+  wasted debugging session.
+
+Thread count is derived from the container's cgroup quota so ONNX Runtime does
+not oversubscribe a fractional CPU. `ORT_NUM_THREADS` overrides it; changing it
+does not affect the measurements.
 
 ### Directly
 

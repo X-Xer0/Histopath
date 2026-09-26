@@ -1,7 +1,6 @@
 {
   "engine": "ONNX U-Net",
   "model_file": "tumor_unet.onnx",
-  "model_precision": "fp32",
   "scope": "sample slides",
   "precise_mode": false,
   "pixel_scale_um": 0.5,

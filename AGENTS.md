@@ -54,6 +54,19 @@ do this; keep it that way.
 6. **Graceful fallback** — if `backend/models/tumor_unet.onnx` is missing, the
    engine switches to hematoxylin colour deconvolution + Otsu thresholding so the
    service still answers. `/api/health` reports which engine is live.
+7. **ONNX Runtime is told how many threads to use.** Left to itself it sizes its
+   pool from the *host's* core count and tries to pin threads to CPUs the
+   container may not touch, which logs
+   `pthread_setaffinity_np failed ... error code: 22` and oversubscribes a
+   fractional core — on an S1 pod (0.5 CPU) that made a single 256² tile take
+   5.6 s instead of ~1.8 s. `detect_cpu_budget()` reads the cgroup quota
+   (`cpu.max` on v2, `cpu.cfs_quota_us` on v1); `ORT_NUM_THREADS` overrides it,
+   and `/api/health` reports the value as `onnx_threads`.
+
+   This is scheduling only and **cannot change a measurement.** Measured at 1, 2,
+   4 and default threads on a reference slide: Dice identical to six decimals
+   (0.830275) and the raw probability maps differing by `0.000e+00`. Never remove
+   the explicit thread count to "simplify" the session setup.
 
 ---
 

@@ -215,6 +215,7 @@ def health_check():
         "version": "2.1.0",
         "engine": engine.engine_name,
         "model_file": engine.model_file or None,
+        "onnx_threads": engine.ort_num_threads,
         "default_pixel_scale_um": 0.5,
         "precise_mode_available": engine.onnx_session is not None,
         "async_analysis": True,

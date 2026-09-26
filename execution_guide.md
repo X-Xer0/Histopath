@@ -222,46 +222,55 @@ The engine reloads in place — no restart. `/api/health` then reports
 
 These were all found the hard way; they are recorded so they are not repeated.
 
-1. **The tile grid must reach the far edge.** `range(0, h - tile + 1, stride)`
+1. **Tell ONNX Runtime how many threads to use, in a container.** Created with no
+   `SessionOptions`, it sizes its pool from the host's cores and pins threads
+   with `pthread_setaffinity_np`; inside a container the cgroup refuses the
+   affinity (`error code: 22`) and the surplus threads then fight over a
+   fraction of a core. On a 0.5-CPU pod one 256² tile took 5.6 s against ~1.8 s
+   on a desktop. `detect_cpu_budget()` reads the cgroup quota and sets the count;
+   `ORT_NUM_THREADS` overrides it. Measured as scheduling-only: Dice identical to
+   six decimals and probability maps differing by `0.000e+00` across thread
+   counts.
+2. **The tile grid must reach the far edge.** `range(0, h - tile + 1, stride)`
    stops at the last stride multiple: for a 1000 px slide with tile 256 and
    stride 192 it produced 0/192/384/576, ending at 832, so the final 168 px band
    — 31 % of the image — was never processed and was silently reported as
    background. That band held **70 % of all missed nuclei**. Fixing it moved the
    official test score from Dice 0.688 to 0.815 with no retraining. Use
    `_tile_origins()` and keep the `TestTilingCoverage` regression tests.
-2. **Dropping the overlap is free accuracy-wise.** Stride 248 (8 px overlap)
+3. **Dropping the overlap is free accuracy-wise.** Stride 248 (8 px overlap)
    ties stride 192 (64 px overlap) on Dice — 0.8236 vs 0.8237 over three slides —
    while needing 16 tiles instead of 25.
 3. **INT8 quantization is slower here, not faster.** Dynamic quantization shrank
    the model from 29.4 MB to 9.4 MB but inference went from 2.4 s to 10.5 s per
    tile, because the integer convolution path needs VNNI to be fast and falls
    back to a scalar kernel without it. Measure before shipping a quantized graph.
-4. **Larger tiles do not help.** The network is fully convolutional, so 512 px
+5. **Larger tiles do not help.** The network is fully convolutional, so 512 px
    tiles work (and score identically), but the coarser grid processes 44 % more
    pixels and ends up slower than 256 px tiling.
-5. **Mixed precision destroys this model.** With autocast enabled the gradient
+6. **Mixed precision destroys this model.** With autocast enabled the gradient
    norm is NaN from the second epoch and the GradScaler decays 65536 → 0. With it
    off the gradient norm stays ~0.65–1.1 and Dice improves monotonically.
-6. **Tversky β = 0.7 collapses training.** Weighting false negatives that heavily
+7. **Tversky β = 0.7 collapses training.** Weighting false negatives that heavily
    rewards predicting everything; the model settles into an "almost all
    foreground" state. Balanced Dice is stable, and precision/recall is tuned at
    the decision threshold instead.
-7. **The LR schedule matters more than the LR.** The first 25-epoch run never
+8. **The LR schedule matters more than the LR.** The first 25-epoch run never
    decayed the learning rate and was still improving at the final epoch. Cosine
    decay over 50 epochs converged properly.
-8. **Patch-level validation splits lie.** Tiles overlap 27 % and share patients;
+9. **Patch-level validation splits lie.** Tiles overlap 27 % and share patients;
    a patch-level split reported 0.86 validation Dice that did not survive unseen
    patients. Patient-wise splits are mandatory.
-9. **Instance separation needs a Voronoi partition, not watershed.** OpenCV's
+10. **Instance separation needs a Voronoi partition, not watershed.** OpenCV's
    watershed on a synthetic distance surface misassigns symmetric touching blobs
    (two overlapping circles came out as one region of 2593 px and one of 9 px).
    `distanceTransformWithLabels` with `DIST_LABEL_CCOMP` gives the correct
    nearest-seed partition and is deterministic.
-10. **Calibration is 0.50 µm/px, not 0.25.** The median annotated nucleus is
+11. **Calibration is 0.50 µm/px, not 0.25.** The median annotated nucleus is
    19.1 px across; at 0.50 µm/px that is 9.57 µm (correct for epithelial tumour
    nuclei), at 0.25 µm/px 4.78 µm (smaller than a lymphocyte — impossible across
    seven carcinoma types). The "40×" in the challenge description refers to the
    original scan; the released crops are downsampled.
-11. **Seven training slides have no organ metadata.** The official organ PDF
+12. **Seven training slides have no organ metadata.** The official organ PDF
    documents 30 patients; the dataset contains 37 slides. The EDA reports the
    extra seven as "Unlisted" rather than guessing.

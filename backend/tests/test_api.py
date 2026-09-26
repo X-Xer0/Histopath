@@ -6,7 +6,9 @@ Run with:  python -m pytest backend/tests/test_api.py -q
 """
 
 import io
+import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -302,6 +304,71 @@ class TestAsyncJobFlow(unittest.TestCase):
         raw = b64.b64decode(state["original_base64"].split(",", 1)[1])
         arr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
         self.assertLessEqual(max(arr.shape[:2]), 900)
+
+
+class TestCpuBudgetDetection(unittest.TestCase):
+    """
+    ONNX Runtime must be told how many threads to use. Left to itself it sizes
+    the pool from the host's core count and tries to pin threads to CPUs the
+    container is not allowed to use, which is what produced
+
+        pthread_setaffinity_np failed ... error code: 22
+
+    on the deployed 0.5-CPU pod, while oversubscribing the core it did have.
+    """
+
+    def setUp(self):
+        self._saved = os.environ.pop("ORT_NUM_THREADS", None)
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["ORT_NUM_THREADS"] = self._saved
+        else:
+            os.environ.pop("ORT_NUM_THREADS", None)
+
+    def test_env_override_wins(self):
+        from backend.app.model import detect_cpu_budget
+        os.environ["ORT_NUM_THREADS"] = "3"
+        self.assertEqual(detect_cpu_budget(), 3)
+
+    def test_env_override_ignores_junk(self):
+        from backend.app.model import detect_cpu_budget
+        for junk in ("", "0", "-2", "many"):
+            os.environ["ORT_NUM_THREADS"] = junk
+            self.assertGreaterEqual(detect_cpu_budget(), 1, junk)
+
+    def test_cgroup_v2_quota(self):
+        from backend.app.model import detect_cpu_budget
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "cpu.max").write_text("50000 100000")       # 0.5 CPU
+            self.assertEqual(detect_cpu_budget(root), 1)
+            (root / "cpu.max").write_text("200000 100000")      # 2 CPUs
+            self.assertEqual(detect_cpu_budget(root), 2)
+            (root / "cpu.max").write_text("400000 100000")      # 4 CPUs
+            self.assertEqual(detect_cpu_budget(root), 4)
+
+    def test_cgroup_v2_unlimited_falls_back(self):
+        from backend.app.model import detect_cpu_budget
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "cpu.max").write_text("max 100000")
+            self.assertGreaterEqual(detect_cpu_budget(root), 1)
+
+    def test_cgroup_v1_quota(self):
+        from backend.app.model import detect_cpu_budget
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "cpu").mkdir()
+            (root / "cpu" / "cpu.cfs_quota_us").write_text("100000")
+            (root / "cpu" / "cpu.cfs_period_us").write_text("100000")
+            self.assertEqual(detect_cpu_budget(root), 1)
+
+    def test_engine_reports_its_thread_count(self):
+        from backend.app.model import engine
+        self.assertGreaterEqual(engine.ort_num_threads, 1)
+        self.assertEqual(client.get("/api/health").json()["onnx_threads"],
+                         engine.ort_num_threads)
 
 
 class TestAPI(unittest.TestCase):

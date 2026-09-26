@@ -53,9 +53,11 @@ USER appuser
 
 EXPOSE 8000
 
-# Inference is CPU-bound and can take tens of seconds, so allow a long start
-# period before the first health probe counts against the container.
-HEALTHCHECK --interval=30s --timeout=8s --start-period=40s --retries=4 \
+# Inference is CPU-bound and can pin a fractional CPU for a minute at a time, so
+# the probe needs room: on an S1 pod (0.5 CPU) a saturated core can delay even a
+# trivial endpoint, and four consecutive failures would mark the container
+# unhealthy while a job is still running.
+HEALTHCHECK --interval=30s --timeout=20s --start-period=60s --retries=5 \
     CMD python -c "import os,urllib.request,sys; \
 url=f\"http://127.0.0.1:{os.environ.get('PORT','8000')}/api/health\"; \
 sys.exit(0 if urllib.request.urlopen(url, timeout=6).status == 200 else 1)"

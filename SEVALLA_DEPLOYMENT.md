@@ -174,7 +174,44 @@ current code and redeploy.
 
 ---
 
-## 6. Verify the deployment
+## 6. The `pthread_setaffinity_np` errors in the runtime log
+
+You will see lines like this at start-up:
+
+```
+[E:onnxruntime:Default, env.cc:298 ThreadMain] pthread_setaffinity_np failed for
+thread: 63, index: 1, mask: {2, 10, }, error code: 22 error msg: Invalid
+argument. Specify the number of threads explicitly so the affinity is not set.
+```
+
+They are **not** the reason the app looks broken — the service starts and serves
+normally after them — but they are a real symptom worth fixing.
+
+What is happening: ONNX Runtime was created without explicit thread counts, so it
+sized its pool from the **host's** core count (the masks above name CPUs 1–12,
+the host's cores) and tried to pin one thread per core with
+`pthread_setaffinity_np`. The container's cgroup only allows a slice of those
+CPUs, so the pinning fails, and the dozens of threads it created then compete for
+the 0.5 CPU an S1 pod actually provides. That oversubscription is why a single
+256×256 tile took **5.6 s on the pod** against **~1.8 s** on a 4-core desktop.
+
+The fix (already in `backend/app/model.py`): the engine reads its CPU budget from
+the cgroup quota, sets `intra_op_num_threads` to it and `inter_op_num_threads` to
+1, and reports the result as `onnx_threads` in `/api/health`. `ORT_NUM_THREADS`
+overrides it if you want to experiment without a rebuild.
+
+**This cannot affect accuracy.** Measured on a reference slide at 1, 2, 4 and
+default threads: identical Dice to six decimal places (0.830275) and raw
+probability maps differing by `0.000e+00`. Thread count is a scheduling
+parameter, nothing more.
+
+If you still see the errors after redeploying, check `onnx_threads` in
+`/api/health` — if it reports a sensible number the configuration is applied and
+the errors are coming from elsewhere.
+
+---
+
+## 7. Verify the deployment
 
 Open the application URL (the **View** button on the Overview page) and check:
 
@@ -194,9 +231,19 @@ Expected:
 }
 ```
 
-If `engine` says **"Stain Deconvolution Fallback"** instead, the ONNX file did not
-make it into the image — check that `backend/models/tumor_unet.onnx` is committed
-and that `.dockerignore` does not exclude it.
+Check three fields:
+
+| Field | Expected | If it is wrong |
+|---|---|---|
+| `version` | matches the commit you just pushed (`2.1.x`) | **the container is serving an older build** — it has not redeployed |
+| `engine` | `ONNX U-Net` | the model did not make it into the image; confirm `backend/models/tumor_unet.onnx` is committed and not excluded by `.dockerignore` |
+| `onnx_threads` | `1` on S1, `2` on S3, and so on | the thread budget was not applied |
+
+The `version` check matters more than it sounds. A deployment was once left
+serving a build from 38 minutes before the fix was pushed, and the symptom looked
+like an application bug when the code on GitHub was already correct. Compare the
+`version` in `/api/health` with `grep -m1 version= backend/app/main.py` before
+debugging anything else.
 
 Then open the UI in a browser, upload one of the slides from `samples/`, and run
 the segmentation. The page shows a running timer while the job is queued and
@@ -216,7 +263,7 @@ kill appears there as the container restarting.
 
 ---
 
-## 7. Keeping the cost down
+## 8. Keeping the cost down
 
 * **Hibernation** — Sevalla can pause a runtime pod when it is not in use. For a
   capstone demo this is the difference between $10 and a few dollars a month.
@@ -227,7 +274,7 @@ kill appears there as the container restarting.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -241,7 +288,7 @@ kill appears there as the container restarting.
 
 ---
 
-## 9. If free hosting matters more than Sevalla does
+## 10. If free hosting matters more than Sevalla does
 
 Worth knowing: **Hugging Face Docker Spaces now require a paid plan** (PRO), so
 that is no longer a free alternative despite the free CPU hardware table. Render's

@@ -1,94 +1,193 @@
+"""
+PDF report builder.
+
+Produces a nucleus segmentation and morphometry report: the slide, the
+segmentation, the measurements and the nuclear size distribution.
+
+This is a quantitative analysis report. It deliberately contains no diagnosis,
+no severity grade and no treatment recommendation, because the segmentation
+model detects nuclei and cannot distinguish malignant from benign tissue.
+"""
+
 import io
+from typing import Any, Dict
+
 import cv2
 import numpy as np
-from pathlib import Path
-from typing import Dict, Any
-
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.graphics.shapes import Drawing, Rect, String, Line
+from reportlab.platypus import Image as RLImage
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+INK = colors.HexColor("#1A2A4A")
+ACCENT = colors.HexColor("#2B6CB0")
+MUTED = colors.HexColor("#5A6472")
+LINE = colors.HexColor("#CBD5E0")
+
+DISCLAIMER = (
+    "This report contains quantitative image analysis only. The segmentation model detects "
+    "cell nuclei in H&E stained tissue and does not classify tissue as benign or malignant. "
+    "Nothing in this document is a diagnosis or a treatment recommendation, and it must not "
+    "be used as the basis for clinical decisions."
+)
+
+DETECTION_NOTE = (
+    "Detection bias: measured against the official MoNuSeg 2018 test set, this pipeline "
+    "recovers about 86% of annotated nuclear pixels and detects roughly 20% more nuclei "
+    "than were annotated - part of that is genuinely separating touching nuclei, part is "
+    "segmentation speckle. Treat every figure here as a relative measurement: compare "
+    "slides processed by this same pipeline rather than against absolute reference values."
+)
+
+
+def _size_histogram(metrics: Dict[str, Any], width: float = 460, height: float = 120) -> Drawing:
+    """Bar chart of the nuclear size distribution, drawn with ReportLab primitives."""
+    dist = metrics.get("size_distribution", {})
+    edges = dist.get("bin_edges_um") or []
+    counts = dist.get("counts") or []
+    drawing = Drawing(width, height)
+
+    plot_h = height - 26
+    plot_w = width - 34
+    drawing.add(Line(30, 18, 30 + plot_w, 18, strokeColor=LINE, strokeWidth=0.6))
+
+    if not counts or max(counts) == 0:
+        drawing.add(String(30 + plot_w / 2, plot_h / 2, "no nuclei detected",
+                           fontSize=8, fillColor=MUTED, textAnchor="middle"))
+        return drawing
+
+    peak = max(counts)
+    n = len(counts)
+    bar_w = plot_w / n
+    for i, c in enumerate(counts):
+        h = (c / peak) * plot_h
+        x = 30 + i * bar_w + bar_w * 0.15
+        drawing.add(Rect(x, 18, bar_w * 0.7, h, fillColor=ACCENT, strokeColor=None))
+        drawing.add(String(x + bar_w * 0.35, 8, f"{edges[i]:.0f}", fontSize=6,
+                           fillColor=MUTED, textAnchor="middle"))
+    drawing.add(String(30 + plot_w / 2, height - 10,
+                       "nuclear equivalent diameter (µm)", fontSize=7.5,
+                       fillColor=MUTED, textAnchor="middle"))
+    return drawing
+
 
 def generate_pdf_report_bytes(
     img_bgr: np.ndarray,
     overlay_bgr: np.ndarray,
+    instance_overlay_bgr: np.ndarray,
     metrics: Dict[str, Any],
-    grading_info: Dict[str, str],
-    patient_id: str = "PAT-89210",
-    biopsy_site: str = "Breast Tissue / Lymph Node"
+    engine_name: str = "ONNX U-Net",
+    precise_mode: bool = False,
+    sample_id: str = "",
 ) -> bytes:
-    """
-    Generates a clinical pathology PDF report as a binary byte stream.
-    """
+    """Build the PDF report and return it as a byte stream."""
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=40, rightMargin=40,
+                            topMargin=40, bottomMargin=36)
     styles = getSampleStyleSheet()
     story = []
-    
-    # Save visual panel to buffer
-    panel_img = np.hstack([cv2.resize(img_bgr, (250, 250)), cv2.resize(overlay_bgr, (250, 250))])
-    _, panel_png = cv2.imencode(".png", panel_img)
-    panel_bytes = io.BytesIO(panel_png.tobytes())
-    
-    # PDF Styles
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#1A365D'), spaceAfter=10)
-    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#2B6CB0'), spaceBefore=10, spaceAfter=5)
-    
-    # 1. Header
-    story.append(Paragraph("AUTOMATED HISTOPATHOLOGY DIAGNOSTIC REPORT", title_style))
-    story.append(Spacer(1, 5))
-    
-    # Metadata Table
-    meta_data = [
-        ["Patient ID:", patient_id, "Report Date:", "2026-08-27"],
-        ["Biopsy Site:", biopsy_site, "Magnification Scale:", f"20x ({metrics.get('pixel_scale_um', 0.5)} um/px)"],
-        ["Stain Type:", "H&E (Hematoxylin & Eosin)", "Pipeline Model:", "PyTorch U-Net / ONNX Engine"]
+
+    title_style = ParagraphStyle('T', parent=styles['Heading1'], fontSize=16,
+                                 textColor=INK, spaceAfter=2)
+    sub_style = ParagraphStyle('S', parent=styles['Normal'], fontSize=8.5,
+                               textColor=MUTED, spaceAfter=10)
+    h2_style = ParagraphStyle('H2', parent=styles['Heading2'], fontSize=11,
+                              textColor=ACCENT, spaceBefore=12, spaceAfter=6)
+    body = ParagraphStyle('B', parent=styles['Normal'], fontSize=8.5, leading=11.5,
+                          textColor=colors.HexColor("#333A45"))
+    small = ParagraphStyle('SM', parent=styles['Normal'], fontSize=7.5, leading=10,
+                           textColor=MUTED)
+
+    # ---------------- header ----------------
+    story.append(Paragraph("NUCLEI SEGMENTATION &amp; MORPHOMETRY REPORT", title_style))
+    story.append(Paragraph(
+        "Automated histopathology image analysis &nbsp;·&nbsp; quantitative measurements only",
+        sub_style))
+
+    meta = [
+        ["Sample", sample_id or "uploaded slide", "Analysis engine", engine_name],
+        ["Stain", "H&E (hematoxylin & eosin)",
+         "Mode", "precise (8x TTA)" if precise_mode else "standard"],
+        ["Spatial calibration",
+         f"{metrics.get('pixel_scale_um', 0.5)} µm/pixel",
+         "Calibration basis", "40x source scan, distributed at effective 20x"],
     ]
-    t_meta = Table(meta_data, colWidths=[90, 160, 110, 180])
+    t_meta = Table(meta, colWidths=[80, 165, 95, 190])
     t_meta.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F7FAFC')),
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#2D3748')),
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F4F7FA')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor("#2D3748")),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#E2E8F0')),
     ]))
     story.append(t_meta)
-    story.append(Spacer(1, 10))
-    
-    # 2. Visual Panel
-    story.append(Paragraph("<b>1. Microscopic Slide & Tumor Segmentation Overlay</b>", h2_style))
-    story.append(RLImage(panel_bytes, width=480, height=240))
-    story.append(Spacer(1, 10))
-    
-    # 3. Quantitative Summary Table
-    story.append(Paragraph("<b>2. Quantitative Tissue Metrics & Severity Grading</b>", h2_style))
-    
-    metrics_table_data = [
-        ["Diagnostic Parameter", "Measured Value"],
-        ["Total Tissue Surface Area", f"{metrics.get('total_area_mm2', 0)} mm²"],
-        ["Segmented Tumor Area", f"{metrics.get('tumor_area_mm2', 0)} mm² ({metrics.get('tumor_area_um2', 0)} μm²)"],
-        ["Tumor Burden Ratio (%)", f"{metrics.get('tumor_burden_percent', 0):.2f} %"],
-        ["Histological Severity Grade", f"{grading_info.get('grade', 'N/A')} - {grading_info.get('description', '')}"],
-        ["Assessed Risk Category", f"{grading_info.get('risk_category', 'N/A')}"]
+
+    # ---------------- images ----------------
+    def encode(img: np.ndarray) -> io.BytesIO:
+        ok, png = cv2.imencode(".png", img)
+        return io.BytesIO(png.tobytes())
+
+    panel = np.hstack([
+        cv2.resize(img_bgr, (215, 215)),
+        cv2.resize(overlay_bgr, (215, 215)),
+        cv2.resize(instance_overlay_bgr, (215, 215)),
+    ])
+    story.append(Paragraph("1. Slide, detected nuclei and individual nucleus map", h2_style))
+    story.append(RLImage(encode(panel), width=460, height=153))
+    story.append(Paragraph(
+        "Left: uploaded slide. Centre: detected nuclear regions. "
+        "Right: each detected nucleus coloured separately.", small))
+
+    # ---------------- measurements ----------------
+    story.append(Paragraph("2. Quantitative measurements", h2_style))
+    cellularity = metrics.get("cellularity", {})
+    rows = [
+        ["Measurement", "Value", "Measurement", "Value"],
+        ["Nuclei detected", f"{metrics.get('nuclei_count', 0):,}",
+         "Nuclear density", f"{metrics.get('nuclear_density_percent', 0):.2f} %"],
+        ["Mean nuclear area", f"{metrics.get('mean_nuclear_area_um2', 0):.2f} µm²",
+         "Median nuclear area", f"{metrics.get('median_nuclear_area_um2', 0):.2f} µm²"],
+        ["Mean nuclear diameter", f"{metrics.get('mean_equivalent_diameter_um', 0):.2f} µm",
+         "Size variability (CV)", f"{metrics.get('size_variability_cv_percent', 0):.2f} %"],
+        ["Nuclei per mm²", f"{metrics.get('nuclei_per_mm2', 0):,.1f}",
+         "Cellularity", f"{cellularity.get('category', '-')}"],
+        ["Total nuclear area", f"{metrics.get('nuclear_area_mm2', 0):.6f} mm²",
+         "Tissue area analysed", f"{metrics.get('tissue_area_mm2', 0):.6f} mm²"],
     ]
-    t_metrics = Table(metrics_table_data, colWidths=[240, 300])
-    t_metrics.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (1,0), colors.HexColor('#2B6CB0')),
-        ('TEXTCOLOR', (0,0), (1,0), colors.white),
-        ('FONTNAME', (0,0), (1,0), 'Helvetica-Bold'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#EDF2F7')]),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+    t = Table(rows, colWidths=[120, 110, 120, 110])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), ACCENT),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.4, LINE),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F4F7FA')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
     ]))
-    story.append(t_metrics)
-    story.append(Spacer(1, 10))
-    
-    # 4. Clinical Impression & Recommendation
-    story.append(Paragraph("<b>3. Pathologist Impression & Clinical Protocol</b>", h2_style))
-    impression_text = f"The automated computer vision pipeline identified region(s) consistent with malignant tumor tissue comprising <b>{metrics.get('tumor_burden_percent', 0):.2f}%</b> of the biopsy field. Classification indicates <b>{grading_info.get('grade')} ({grading_info.get('description')})</b>. Clinical recommendation: <i>{grading_info.get('clinical_recommendation')}</i>"
-    story.append(Paragraph(impression_text, styles['Normal']))
-    
+    story.append(t)
+    story.append(Paragraph(
+        f"Cellularity is a descriptive summary of measured nuclear density: "
+        f"{cellularity.get('detail', '')}. Its bands are {cellularity.get('basis', '')}, "
+        f"not a clinical reference range.", small))
+
+    # ---------------- size distribution ----------------
+    story.append(Paragraph("3. Nuclear size distribution", h2_style))
+    story.append(_size_histogram(metrics))
+
+    # ---------------- notes ----------------
+    story.append(Paragraph("4. Interpretation notes and limitations", h2_style))
+    story.append(Paragraph(DETECTION_NOTE, body))
+    story.append(Spacer(1, 5))
+    story.append(Paragraph(DISCLAIMER, body))
+
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()

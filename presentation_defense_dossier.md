@@ -1,110 +1,234 @@
-# Presentation & Viva Defense Dossier: Automated Histopathology System
+# Presentation & Viva Defence Dossier
 
-**Project Title**: Automated Histopathology Tumor Segmentation & Severity Grading System  
-**Deployment Status**: Live Production Deployed on Sevalla Cloud  
-**Target Domain**: Computer Vision in Biomedical Engineering & Clinical Pathology
-
----
-
-## 1. Project Goal & Problem Statement
-
-### The Problem
-In clinical oncology, pathologists evaluate microscopic biopsy tissue slides to diagnose cancer and determine severity. However, manual examination of **H&E (Hematoxylin & Eosin)** stained slides suffers from:
-1. **Intra- & Inter-Observer Variability**: Diagnostic agreement between pathologists varies up to 20-30%.
-2. **Staining & Scanner Variations**: Tissue slides from different hospitals vary in color, hue, and brightness due to lab protocols and scanner hardware.
-3. **Time Constraints & Qualitative Risk**: Estimating tumor area and density manually is subjective and time-consuming.
-
-### Our Goal
-To design, implement, evaluate, and deploy a **full-stack automated computer vision pipeline** that:
-- Normalizes color staining variations across biopsy slides.
-- Accurately segments cancerous tumor boundaries at pixel-level resolution.
-- Computes real physical spatial metrics ($\mu m^2$ and $mm^2$) and **Tumor Burden Percentage**.
-- Predicts histological severity grades (**Grade I: Low**, **Grade II: Moderate**, **Grade III: High/Invasive**).
-- Automatically generates downloadable clinical PDF pathology diagnostic reports.
-- Runs live on a web interface deployed on Sevalla Cloud.
+**Project**: Automated Histopathology Nucleus Segmentation & Morphometry
+**Deployment**: containerised, live on Sevalla (CPU-only)
+**Domain**: computer vision in biomedical engineering and computational pathology
 
 ---
 
-## 2. Key Achievements & Technical Deliverables
+## 1. Problem statement
 
-| Module | Technical Implementation | Achievement / Metric |
-| :--- | :--- | :--- |
-| **Preprocessing** | Macenko Optical Density (OD) Stain Decomposition | Eliminates color variations across labs |
-| **Segmentation AI** | PyTorch U-Net with Skip Connections | **Dice Score: 0.908 – 0.968** on test slides |
-| **Out-of-Distribution Testing** | Independent Benchmark Evaluation (GlaS/MoNuSeg) | **Mean IoU: 0.8315**, **Grade Acc: 96.2%** |
-| **Spatial Engine** | Calibrated Micron Converter ($0.5 \mu m/\text{px}$) | Computes physical surface area ($\mu m^2 / mm^2$) |
-| **Backend Service** | Python FastAPI REST Microservice | Serves `/api/predict`, `/api/generate-report` |
-| **Report Generator** | ReportLab Dynamic PDF Builder | Streams printable clinical diagnostic reports |
-| **Web Frontend** | Glassmorphism UI + HTML5 Dual Canvas | Interactive **Mask Opacity Slider (0-100%)** |
-| **Cloud Deployment** | Multi-Stage Docker Container | Deployed live on Sevalla Cloud PaaS |
+Histopathology — examining stained tissue under a microscope — is how cancer is
+diagnosed. The most common stain, hematoxylin and eosin (H&E), colours nuclei
+purple and cytoplasm pink. Three practical problems make manual assessment hard:
 
----
+1. **Observer variability.** Grading is a judgement call; the same slide can be
+   read differently by two pathologists, or by the same pathologist on different
+   days.
+2. **Colour inconsistency.** Stain batch, lab protocol and scanner hardware all
+   change how the same tissue appears. A method tuned on one scanner may not
+   transfer.
+3. **Eyeball estimation.** Nuclear density and cell counts are usually judged
+   visually rather than measured.
 
-## 3. How We Achieved It (System Architecture & Pipeline)
+## 2. Goal
 
-```
-[Biopsy Tissue Slide (H&E Image)]
-              │
-              ▼
-[1. Preprocessing: Macenko Stain Normalization (RGB → Optical Density Space)]
-              │
-              ▼
-[2. Segmentation AI: PyTorch U-Net Model (Trained with Combo Loss: BCE + Dice)]
-              │
-              ▼
-[3. Post-Processing: Binary Thresholding & Contour Boundary Extraction]
-       ┌──────┴─────────────────────────┐
-       ▼                                ▼
-[4. Quantitative Spatial Engine] [5. Severity Classifier]
-(Micron Area μm² / Tumor Burden %) (Grade I, II, III Rules)
-       └──────┬─────────────────────────┘
-              ▼
-[6. Automated PDF Diagnostic Report Generator (ReportLab)]
-              │
-              ▼
-[7. Production Deployment (FastAPI + Glassmorphism UI on Sevalla Cloud)]
-```
+Build, evaluate and deploy a system that segments **cell nuclei** in H&E slides
+and reports **quantitative morphometry** — how much of the tissue is nuclei, how
+many nuclei there are, how large they are, and how variable that size is — with
+every measurement traceable to a verified spatial calibration.
 
----
+## 3. What was built
 
-## 4. Why We Chose Specific Technologies (Design Rationale)
+| Module | Implementation | Outcome |
+|---|---|---|
+| Data handling | MoNuSeg 2018, 37 slides, XML polygon annotations parsed to masks with a Python port of the official MATLAB routine | 24,140 annotated nuclei ingested |
+| Preprocessing | 256×256 patches, stride 186 (27 % overlap), blank-tile rejection, geometric + elastic + stain augmentation | 925 training patches |
+| Segmentation | U-Net, 4 levels, base 64 filters, 7.7 M parameters, trained from scratch | Best validation Dice **0.8534** |
+| Loss | Balanced BCE + Dice (Tversky α = β = 0.5) | Stable; earlier recall-weighted variants collapsed |
+| Inference | Single-file ONNX (opset 11, 29.4 MB), tiled with overlap averaging, threshold 0.50 | CPU-only, no GPU in production |
+| Instances | Distance-transform seeding + nearest-seed partition | Touching nuclei counted separately |
+| Morphometry | Nuclear density, count, nuclei/mm², area, equivalent diameter, CV, size distribution | 20 unit/API tests green |
+| Reporting | Per-nucleus CSV + ReportLab PDF morphometry report | No clinical claims |
+| Fallback | Hematoxylin colour deconvolution + Otsu | Service never goes dark |
+| Deployment | Multi-stage Docker, `$PORT`-aware, Sevalla | Single container, single origin |
 
-1. **Why U-Net Architecture?**
-   - U-Net features a Contracting path (Encoder for feature extraction) and an Expansive path (Decoder for spatial localization) connected by **skip connections**.
-   - *Rationale*: Skip connections copy fine spatial boundary details directly from encoder layers to decoder layers, preventing the loss of high-resolution cellular edge detail.
+## 4. Results
 
-2. **Why Combo Loss ($L_{\text{BCE}} + L_{\text{Dice}}$)?**
-   - Standard Binary Cross-Entropy (BCE) treats every pixel equally, which fails when tumor regions cover only 5-10% of a slide (class imbalance).
-   - *Rationale*: Dice Loss directly maximizes spatial contour overlap. Combining $L = L_{\text{BCE}} + L_{\text{Dice}}$ guarantees stable gradient convergence and high contour precision.
+Benchmark on the **official MoNuSeg test set** — 14 slides from patients never
+seen in training, threshold 0.50, 8× test-time augmentation:
 
-3. **Why Macenko Stain Normalization?**
-   - Hematoxylin stains nuclei purple ($H$), while Eosin stains cytoplasm pink ($E$).
-   - *Rationale*: Converts RGB pixels into Optical Density space ($OD = -\log_{10}(I/I_0)$), extracts stain vectors via SVD/PCA, and standardizes color matrices across different hospital scanners.
+| Metric | Value |
+|---|---|
+| Mean Dice | **0.8146 ± 0.0497** |
+| Mean IoU | 0.6900 |
+| Mean AJI (instance) | 0.5849 |
+| Precision | 0.7802 |
+| Recall | 0.8589 |
+| Specificity | 0.9341 |
+| Nuclei detected | 7,938 of 6,697 annotated |
+| Validation Dice (patient-wise) | 0.8534 |
 
-4. **Why ONNX Runtime in the Backend?**
-   - PyTorch GPU models are heavy ($>500\text{MB}$) and slow to boot on standard CPU cloud servers.
-   - *Rationale*: Exporting weights to Open Neural Network Exchange (`.onnx`) format enables ultra-fast C++ optimized CPU inference with minimal memory footprint.
-
-5. **Why FastAPI + Glassmorphism Vanilla JS Frontend?**
-   - *Rationale*: Provides lightweight, asynchronous HTTP throughput, zero client framework bloat, and a responsive dual-canvas interface with interactive mask opacity control.
+**Reproducibility** — three independent 50-epoch runs gave validation Dice of
+0.8525 / 0.8529 / 0.8534 (within 0.1 %).
 
 ---
 
-## 5. Where and Why the System Can Fail (Honest Technical Analysis)
+## 5. The finding worth leading with
 
-1. **Extreme Out-of-Focus / Blurry Slides**:
-   - *Why*: Severe optical blur destroys high-frequency nuclear chromatin details, leading to under-segmentation.
-2. **Physical Tissue Artifacts (Air Bubbles, Folds, Pen Marks)**:
-   - *Why*: Surgical marker ink or air bubble shadows alter Optical Density space, occasionally triggering false-positive contour masks.
-3. **Non-H&E Stain Types (IHC, PAS, Masson's Trichrome)**:
-   - *Why*: The model and stain normalizer are specifically trained on H&E stains. They cannot process immunohistochemistry (IHC) DAB brown stains or macroscopic radiology scans (X-Rays/MRIs).
-4. **Edge Seams in Whole Slide Image (WSI) Patching**:
-   - *Why*: Processing gigapixel whole slide images in isolated $256 \times 256$ tiles without overlapping margin blending can create minor seam artifacts at boundary edges.
+**The model generalises to organs it has never seen.**
+
+| Organs present in training | Mean Dice | Organs never seen | Mean Dice |
+|---|---|---|---|
+| Bladder, Kidney, Lung, Colon, Prostate, Breast | **0.8247** | Thyroid 0.855, Testis 0.800, Brain 0.751 | **0.7894** |
+
+A two-point gap, and **Thyroid was the single best organ of all nine**. MoNuSeg
+exists to test exactly this: it means the model learned general nuclear
+morphology rather than organ-specific texture.
+
+Per-organ breakdown:
+
+| Organ | Dice | AJI | Precision | Recall | Seen in training? |
+|---|---|---|---|---|---|
+| Thyroid | 0.8548 | 0.6489 | 0.8305 | 0.8806 | **no** |
+| Bladder | 0.8470 | 0.6392 | 0.7877 | 0.9159 | yes |
+| Kidney | 0.8455 | 0.6010 | 0.8222 | 0.8702 | yes |
+| Lung | 0.8376 | 0.6039 | 0.8399 | 0.8353 | yes |
+| Prostate | 0.8098 | 0.6088 | 0.7351 | 0.9014 | yes |
+| Colon | 0.8031 | 0.5993 | 0.7888 | 0.8179 | yes |
+| Testis | 0.8003 | 0.4695 | 0.7157 | 0.9076 | **no** |
+| Breast | 0.7869 | 0.5222 | 0.7752 | 0.8061 | yes |
+| Brain | 0.7513 | 0.5645 | 0.7016 | 0.8312 | **no** |
 
 ---
 
-## 6. Future Expansion Roadmap
+## 6. Design rationale
 
-1. **Gigapixel Whole Slide Image (WSI) Pyramid Tiling**: Integrate `OpenSlide` and `PyVips` for multi-gigapixel slide processing.
-2. **Multi-Class Tumor Subtyping**: Extend binary segmentation to multi-class prediction (distinguishing ductal carcinoma, lobular carcinoma, stroma, and necrosis).
-3. **Vision Transformer (ViT / Swin-UNet) Backbone**: Compare CNN encoder performance against Transformer-based medical segmentation backbones.
+**Why U-Net.** The encoder shrinks the image to learn context; the decoder
+rebuilds resolution; skip connections copy fine detail straight across so nucleus
+boundaries stay sharp rather than blurring on the way back up.
+
+**Why BCE + Dice and not something more exotic.** Tumour tissue is a small
+fraction of each tile, so BCE alone converges to "predict background everywhere"
+and still scores acceptably. Dice directly rewards overlap. We tried weighting
+false negatives more heavily with Tversky β = 0.7 and it **destroyed training** —
+the model collapsed into an "almost everything is foreground" state and never
+escaped. Precision/recall is therefore tuned at the decision threshold, which is
+both safer and measurable.
+
+**Why ONNX on CPU.** A PyTorch GPU runtime is heavy and slow to boot on a
+CPU container. The exported graph is 29.4 MB, loads in seconds, and needs no CUDA,
+which is what makes free-tier hosting possible.
+
+**Why stain handling.** Colour differences between scanners are a real failure
+mode, so inference can normalise in optical-density space and the fallback engine
+works directly on the hematoxylin channel.
+
+**Why the calibration is 0.50 µm/pixel.** The challenge states the slides were
+captured at 40×, which would suggest 0.25 µm/px. That is wrong for the distributed
+files, and the dataset proves it: the median annotated nucleus measures 19.1 px
+across, which is **9.57 µm at 0.50 µm/px** — a textbook epithelial tumour nucleus
+— and only 4.78 µm at 0.25 µm/px, smaller than a lymphocyte, which is impossible
+across seven carcinoma types. The released 1000×1000 crops are the 40× scan
+downsampled to an effective ~20×. Everything is reported as "40× source,
+effective 20×", and the API accepts a `pixel_scale_um` parameter so another
+scanner can supply its own.
+
+---
+
+## 7. Honest limitations
+
+1. **Residual recall gap.** Recall is 0.86, so about 14 % of annotated nuclear
+   pixels are still missed — 428 k false negatives against 718 k false positives on
+   the test set. The remaining misses are small or faintly stained nuclei, which
+   the Dice loss under-weights. Threshold tuning cannot recover them: the
+   Dice-versus-threshold curve is flat within 0.4 % between 0.30 and 0.60.
+2. **Counts are relative, not absolute.** The pipeline detects about 20 % more
+   nuclei than were annotated (7,938 vs 6,697; per-slide 103 %–167 %). Part of that
+   is genuinely separating touching nuclei, part is segmentation speckle, and the
+   balance shifts with how densely the tissue is packed. The UI and the PDF both
+   disclose this.
+3. **Nuclei are not tumours.** MoNuSeg annotates *all* nuclei. The model cannot
+   distinguish malignant from benign, which is why tumour burden and grading were
+   removed rather than approximated.
+4. **Instance metrics are limited by method.** AJI 0.585 because nuclei are
+   separated from a binary mask after the fact, not predicted as instances. The
+   MoNuSeg leaderboard's 0.13–0.69 AJI range comes from true instance-segmentation
+   entries, so the numbers are not directly comparable — worth stating before you
+   are asked.
+5. **Brain is the weakest organ** (0.751), dragged down by one slide
+   (TCGA-HT-8564, Dice 0.668) where precision collapses to 0.55's worth of
+   spurious detections. The cause is not yet isolated.
+6. **Not clinically usable.** Research use only; the tool reports measurements and
+   does not diagnose.
+
+---
+
+## 8. Anticipated questions
+
+**"Your Dice moved from 0.69 to 0.81 late in the project. What happened?"**
+We found an inference bug, not a model problem. The tiled sliding window built its
+tile origins with `range(0, h - tile + 1, stride)`, which stops at the last
+multiple of the stride. On a 1000 px slide that produced origins 0/192/384/576, so
+the grid ended at 832 px and **the final 168 px band — 31 % of every image — was
+never processed**. Those pixels came back as probability zero and were silently
+reported as background. When we measured where the errors actually were, 70 % of
+all missed pixels sat inside that band. Fixing the grid — one helper function and
+two loop lines — took Dice from 0.688 to 0.815 with **no retraining**. The model
+was always better than the pipeline around it.
+
+**"How did you not notice sooner?"**
+Because we were reading the validation number and the test number separately and
+attributing the gap to domain shift. Validation is computed on 256×256 patches, so
+it never touched the tiling code; it was reporting 0.853 the whole time. The honest
+lesson is the one we now follow: when two numbers disagree, measure where the error
+physically is before theorising about why.
+
+**"Is 0.81 good?"**
+It is in line with — and for a from-scratch 7.7 M-parameter model trained on 925
+patches, above — typical published U-Net baselines on this dataset, which sit in
+the mid-0.70s to low-0.80s. Those setups usually have pretrained encoders, far more
+patches and test-time ensembling. We report the untouched official test set.
+
+**"Why not grade the tumour — that was the original idea?"**
+Because we tested it and it would have been fabricated. The annotations are
+nuclear boundaries, not tumour regions; there is no signal in the data that
+separates malignant from benign. The original app produced Grade I/II/III from
+nuclear density, which is not a grading criterion. We removed it rather than
+dress up a number the model cannot support.
+
+**"How do you know 0.50 µm/px is right?"**
+From the dataset's own annotations: 19.1 px median nuclear diameter is 9.57 µm at
+0.50 µm/px and 4.78 µm at 0.25. The second is smaller than a lymphocyte, which
+cannot be true across breast, kidney, lung, prostate, bladder, colon and stomach
+carcinomas. The "40×" refers to the original scan.
+
+**"How do you know your nucleus counts are right?"**
+We measured them against the annotated count on all 14 reference slides. The
+pipeline detects about 20 % more objects than were annotated — 7,938 against
+6,697 — and the per-slide range runs from 103 % to 167 %. Some of that excess is
+real: the reference mask merges touching nuclei into a single connected component
+while our separator deliberately splits them. The rest is segmentation speckle.
+That figure is disclosed in the UI and the report rather than hidden, and it is why
+we present counts as relative measurements rather than absolutes.
+
+**"What happens if the model file is missing?"**
+The engine falls back to hematoxylin colour deconvolution + Otsu thresholding, the
+API keeps answering, and `/api/health` reports which engine is live. This is a
+deliberate design decision so a deployment never goes dark.
+
+**"What did you learn that a textbook would not have taught you?"**
+Six things, all recorded in the execution guide: mixed precision silently destroys
+this model (NaN gradients from epoch 2); recall-weighted Tversky collapses training
+into all-foreground, so balanced Dice plus a tuned threshold is the safer lever;
+patch-level validation splits leak and produce numbers that do not survive unseen
+patients; OpenCV's watershed on a synthetic distance surface misassigns symmetric
+touching nuclei, so we use `distanceTransformWithLabels`; **a tile grid built with
+`range(0, h - tile + 1, stride)` can silently leave a third of the image
+unprocessed**; and INT8 quantization made this model 4.5× *slower*, not faster —
+the integer convolution path needs VNNI and falls back to a scalar kernel without
+it. Every one of those was found by measuring, not by reasoning.
+
+**"Why not just quantize the model to make it faster on the server?"**
+We tried it and rejected it on measurement. Dynamic INT8 quantization shrank the
+model from 29.4 MB to 9.4 MB but inference went from 2.4 s to 10.5 s per tile —
+on CPUs without VNNI acceleration the integer convolution path is slower than
+float32, and a 30 MB model has nothing to gain in the first place. What did work:
+reducing the tile overlap from 64 px to 8 px halved the tile count with no loss in
+Dice, and skipping bare-glass tiles. That is the honest answer to a question you
+will probably get.
+
+**"What would you do next?"**
+Add a boundary-aware loss to attack the false negatives, halve the tiling stride
+to roughly 1,300 patches, and move to an instance-segmentation head (HoVer-Net
+style) to lift AJI. Then whole-slide pyramid support for real clinical slides.

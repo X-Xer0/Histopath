@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HistologyAI - Automated Biopsy Slide Tumor Segmentation & Grading</title>
+    <title>HistologyAI · Nucleus Segmentation &amp; Morphometry</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,120 +14,192 @@
         <!-- Header -->
         <header class="app-header">
             <div class="brand">
-                <div class="logo-icon">🔬</div>
+                <div class="logo-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                        <circle cx="9" cy="9" r="4.2"/>
+                        <circle cx="16.5" cy="14.5" r="3.2"/>
+                        <circle cx="8" cy="17" r="2.4"/>
+                    </svg>
+                </div>
                 <div>
                     <h1>HistologyAI</h1>
-                    <p class="subtitle">Automated Tumor Segmentation & Severity Grading System</p>
+                    <p class="subtitle">Nucleus Segmentation &amp; Morphometry</p>
                 </div>
             </div>
             <div class="header-badges">
-                <span class="badge badge-pulse">● System Ready</span>
-                <span class="badge badge-tech">Sevalla Cloud Native</span>
+                <span class="badge badge-pulse" id="engineBadge">● Checking engine…</span>
+                <span class="badge badge-tech" id="scaleBadge">0.50 µm / px</span>
             </div>
         </header>
 
-        <!-- Main Content Grid -->
+        <!-- Main grid -->
         <main class="dashboard-grid">
-            <!-- Left Column: Upload & Canvas Viewer -->
+            <!-- Viewer -->
             <section class="card viewer-card">
                 <div class="card-header">
-                    <h2>Biopsy Tissue Slide Viewer</h2>
-                    <div class="slider-control" id="sliderGroup" style="display: none;">
-                        <label for="opacitySlider">Mask Opacity: <span id="opacityVal">60%</span></label>
-                        <input type="range" id="opacitySlider" min="0" max="100" value="60">
+                    <h2>Slide Viewer</h2>
+                    <div class="view-toggles" id="viewToggles" style="display:none;">
+                        <button class="vt-btn is-active" data-view="overlay">Overlay</button>
+                        <button class="vt-btn" data-view="instances">Nuclei</button>
+                        <button class="vt-btn" data-view="mask">Mask</button>
+                        <button class="vt-btn" data-view="original">Original</button>
                     </div>
                 </div>
 
-                <!-- Dropzone -->
+                <!-- Upload -->
                 <div class="dropzone" id="dropzone">
                     <div class="dropzone-content">
-                        <div class="upload-icon">📁</div>
-                        <h3>Drag & Drop Microscopic H&E Slide</h3>
-                        <p>Supports PNG, JPG, JPEG, TIFF (Max 20MB)</p>
+                        <div class="upload-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <path d="M12 16V4m0 0L8 8m4-4 4 4"/>
+                                <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                            </svg>
+                        </div>
+                        <h3>Drag &amp; drop an H&amp;E tissue slide</h3>
+                        <p>PNG, JPG, TIFF, BMP or WEBP</p>
                         <input type="file" id="fileInput" accept="image/*" hidden>
-                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Select Slide Image</button>
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                            Select slide image
+                        </button>
                     </div>
                 </div>
 
-                <!-- Canvas Viewer Container -->
-                <div class="canvas-wrapper" id="canvasWrapper" style="display: none;">
+                <!-- Canvas -->
+                <div class="canvas-wrapper" id="canvasWrapper" style="display:none;">
                     <div class="canvas-container">
                         <canvas id="slideCanvas"></canvas>
                     </div>
+                    <div class="view-caption" id="viewCaption"></div>
                 </div>
 
-                <!-- Action Controls -->
-                <div class="action-bar" id="actionBar" style="display: none;">
-                    <button class="btn btn-secondary" id="resetBtn">Reset Slide</button>
-                    <button class="btn btn-accent" id="analyzeBtn">⚡ Run Tumor Segmentation</button>
+                <!-- Controls -->
+                <div class="action-bar" id="actionBar" style="display:none;">
+                    <div class="action-left">
+                        <label class="switch" title="8× test-time augmentation. Slower, but this is the configuration used for the published benchmark.">
+                            <input type="checkbox" id="preciseToggle">
+                            <span class="switch-track"><span class="switch-thumb"></span></span>
+                            <span class="switch-label">Precise mode <em>(8× TTA, slower)</em></span>
+                        </label>
+                        <div class="slider-control" id="sliderGroup" style="display:none;">
+                            <label for="opacitySlider">Overlay opacity <span id="opacityVal">60%</span></label>
+                            <input type="range" id="opacitySlider" min="0" max="100" value="60">
+                        </div>
+                    </div>
+                    <div class="action-right">
+                        <button class="btn btn-secondary" id="resetBtn">Reset</button>
+                        <button class="btn btn-accent" id="analyzeBtn">Run nucleus segmentation</button>
+                    </div>
                 </div>
             </section>
 
-            <!-- Right Column: Results Dashboard -->
+            <!-- Results -->
             <section class="card results-card">
                 <div class="card-header">
-                    <h2>Quantitative Diagnostics Dashboard</h2>
+                    <h2>Morphometry Dashboard</h2>
                 </div>
 
-                <!-- Empty State -->
                 <div class="empty-state" id="emptyResults">
-                    <div class="empty-icon">📊</div>
-                    <p>Upload a tissue slide and click <b>Run Tumor Segmentation</b> to view tumor metrics, severity grade, and download pathology reports.</p>
+                    <div class="empty-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                            <circle cx="7" cy="7" r="2.6"/><circle cx="16" cy="9" r="3.2"/>
+                            <circle cx="10" cy="16" r="2.2"/><circle cx="17.5" cy="16.5" r="1.8"/>
+                        </svg>
+                    </div>
+                    <p>Upload an H&amp;E slide and run the segmentation to measure nuclear
+                       density, nucleus count, nuclear size distribution and more.</p>
                 </div>
 
-                <!-- Loading State -->
-                <div class="loading-state" id="loadingSpinner" style="display: none;">
+                <div class="loading-state" id="loadingSpinner" style="display:none;">
                     <div class="spinner"></div>
-                    <p>Running Macenko Stain Normalization & Deep U-Net Segmentation...</p>
+                    <p id="loadingText">Segmenting nuclei…</p>
                 </div>
 
-                <!-- Diagnostic Results (Hidden initially) -->
-                <div class="results-content" id="resultsContent" style="display: none;">
-                    <!-- Severity Grade Badge -->
-                    <div class="grade-banner" id="gradeBanner">
-                        <div class="grade-badge" id="gradeBadge">Grade II</div>
-                        <div class="grade-text">
-                            <h3 id="gradeTitle">Moderately Differentiated</h3>
-                            <p id="riskTitle">Moderate Risk</p>
+                <div class="results-content" id="resultsContent" style="display:none;">
+                    <!-- summary -->
+                    <div class="summary-strip">
+                        <div class="summary-main">
+                            <span class="summary-label">Nuclei detected</span>
+                            <span class="summary-value" id="metricCount">0</span>
+                            <span class="summary-sub" id="metricPerMm2">0 per mm²</span>
+                        </div>
+                        <div class="cellularity-chip" id="cellularityChip">
+                            <span class="chip-label">Nuclear cellularity</span>
+                            <span class="chip-value" id="cellularityValue">—</span>
                         </div>
                     </div>
 
-                    <!-- Metrics Grid -->
+                    <!-- metrics -->
                     <div class="metrics-grid">
                         <div class="metric-box">
-                            <span class="metric-label">Tumor Burden Ratio</span>
-                            <span class="metric-value highlight" id="metricBurden">0.00 %</span>
+                            <span class="metric-label">Nuclear density</span>
+                            <span class="metric-value highlight" id="metricDensity">0 %</span>
+                            <span class="metric-sub">share of tissue covered by nuclei</span>
                         </div>
                         <div class="metric-box">
-                            <span class="metric-label">Tumor Surface Area</span>
-                            <span class="metric-value" id="metricTumorArea">0.00 mm²</span>
-                            <span class="metric-sub" id="metricTumorUm">0 μm²</span>
+                            <span class="metric-label">Mean nuclear diameter</span>
+                            <span class="metric-value" id="metricDiameter">0 µm</span>
+                            <span class="metric-sub" id="metricDiameterRange">0 – 0 µm</span>
                         </div>
                         <div class="metric-box">
-                            <span class="metric-label">Total Tissue Field Area</span>
-                            <span class="metric-value" id="metricTotalArea">0.00 mm²</span>
+                            <span class="metric-label">Mean nuclear area</span>
+                            <span class="metric-value" id="metricArea">0 µm²</span>
+                            <span class="metric-sub" id="metricAreaMedian">median 0 µm²</span>
                         </div>
                         <div class="metric-box">
-                            <span class="metric-label">Spatial Scale</span>
-                            <span class="metric-value" id="metricScale">0.50 μm / px</span>
+                            <span class="metric-label">Size variability</span>
+                            <span class="metric-value" id="metricCv">0 %</span>
+                            <span class="metric-sub">coefficient of variation</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Total nuclear area</span>
+                            <span class="metric-value" id="metricNuclearArea">0 mm²</span>
+                            <span class="metric-sub" id="metricNuclearAreaUm">0 µm²</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Tissue area analysed</span>
+                            <span class="metric-value" id="metricTissueArea">0 mm²</span>
+                            <span class="metric-sub" id="metricEngine">—</span>
                         </div>
                     </div>
 
-                    <!-- Clinical Protocol Summary -->
-                    <div class="protocol-box">
-                        <h4>Pathologist Protocol & Recommendation</h4>
-                        <p id="recommendationText">Clinical correlation required.</p>
+                    <!-- histogram -->
+                    <div class="histogram-box">
+                        <div class="histogram-head">
+                            <span>Nuclear size distribution</span>
+                            <span class="histogram-axis">equivalent diameter (µm)</span>
+                        </div>
+                        <canvas id="sizeHistogram" width="640" height="170"></canvas>
                     </div>
 
-                    <!-- PDF Report Download Button -->
+                    <!-- notes -->
+                    <div class="note-box">
+                        <b>Calibration.</b> 0.50 µm/pixel — the MoNuSeg slides were scanned at 40×
+                        and distributed downsampled to an effective 20× (verified from the annotated
+                        nuclear diameters).
+                        <br>
+                        <b>Detection bias.</b> Against the official reference set the pipeline
+                        recovers ~86% of annotated nuclear pixels and detects roughly 20% more
+                        nuclei than were annotated. Treat the figures as relative measurements —
+                        compare slides processed by this same pipeline.
+                    </div>
+
+                    <!-- downloads -->
                     <div class="report-action">
+                        <button class="btn btn-secondary btn-block" id="downloadCsvBtn">
+                            Per-nucleus measurements (CSV)
+                        </button>
                         <button class="btn btn-success btn-block" id="downloadReportBtn">
-                            📥 Download Clinical Pathology PDF Report
+                            Download morphometry report (PDF)
                         </button>
                     </div>
                 </div>
             </section>
         </main>
+
+        <footer class="app-footer">
+            Quantitative image analysis only — this tool measures nuclei and does not
+            diagnose disease or recommend treatment.
+        </footer>
     </div>
 
     <script src="app.js"></script>

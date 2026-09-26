@@ -1,8 +1,34 @@
+# Build context control. The dataset, the virtualenvs and the Colab workspace
+# must never be sent to the Docker daemon - together they are over a gigabyte.
+
+# datasets (only needed for training, not for serving)
+MoNuSeg 2018 Training Data/
+MoNuSegTestData/
+
+# python environments
 venv/
+colab_venv/
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# colab workspace and its upload archive
+colab/_data_zip/
+colab/runtime/
+colab/__pycache__/
+
+# repo metadata and docs
 .git/
 .gitignore
-README.md
+.dockerignore
+*.md
+presentation_defense_dossier.md
+
+# local artefacts
+samples/
+he_to_binary_mask_final.m
+Training Patient Organ information.pdf
+.env
+*.log
+.DS_Store

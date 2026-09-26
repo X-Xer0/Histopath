@@ -1,11 +1,21 @@
+# Runtime dependencies for the nucleus segmentation service.
+# Version floors are deliberately permissive so the image still builds when a
+# host resolves newer releases.
+
 fastapi>=0.100.0
-uvicorn>=0.22.0
+uvicorn[standard]>=0.22.0
 python-multipart>=0.0.6
+
 numpy>=1.24.0
 opencv-python-headless>=4.8.0
+pillow>=10.0.0
 reportlab>=4.0.0
+
+onnxruntime>=1.16.0
+
 pydantic>=2.0.0
-onnxruntime>=1.15.0
 requests>=2.31.0
-httpx>=0.24.0
+
+# test tooling (the suite is part of the deliverable)
 pytest>=7.4.0
+httpx>=0.24.0

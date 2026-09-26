@@ -1,6 +1,23 @@
+# Python environments
 venv/
 .venv/
+colab_venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Datasets - hundreds of megabytes, needed only for training.
+# They are NOT part of the application and must never be committed:
+# a `git add .` would otherwise push ~344 MB and Sevalla would clone it all.
+MoNuSeg 2018 Training Data/
+MoNuSegTestData/
+
+# Colab workspace artefacts
+colab/_data_zip/
+colab/runtime/
+colab/__pycache__/
+
+# Local
 .DS_Store
+.env
+*.log
